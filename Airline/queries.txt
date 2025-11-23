@@ -1,0 +1,16 @@
+//1. Query 1
+
+MATCH (origin:Airport)<-[:DEPARTS_FROM]-(f:Flight)-[:ARRIVES_AT]->(destination:Airport)
+RETURN origin.station_code AS origin, 
+       destination.station_code AS destination, 
+       count(f) AS flight_count
+ORDER BY flight_count DESC
+LIMIT 5
+
+//2. Query 2
+
+MATCH(person:Passenger)-[:TOOK]->(j:Journey)-[:ON]->(f:Flight)
+RETURN f.flight_number as flight_id,
+      count(person) as passenger_count
+ORDER BY passenger_count DESC
+LIMIT 10 

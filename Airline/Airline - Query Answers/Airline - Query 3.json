@@ -1,0 +1,27 @@
+﻿[
+  {
+    "generation": "Boomer",
+    "multi_leg_count": 498,
+    "avg_score": 2.7911646586345387
+  },
+  {
+    "generation": "Gen X",
+    "multi_leg_count": 285,
+    "avg_score": 2.999999999999999
+  },
+  {
+    "generation": "Millennial",
+    "multi_leg_count": 130,
+    "avg_score": 2.738461538461538
+  },
+  {
+    "generation": "Silent",
+    "multi_leg_count": 48,
+    "avg_score": 2.6874999999999996
+  },
+  {
+    "generation": "Gen Z",
+    "multi_leg_count": 18,
+    "avg_score": 3.2777777777777777
+  }
+]

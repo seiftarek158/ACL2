@@ -1,0 +1,27 @@
+﻿[
+  {
+    "origin": "LAX",
+    "destination": "IAX",
+    "flight_count": 21
+  },
+  {
+    "origin": "LAX",
+    "destination": "EWX",
+    "flight_count": 17
+  },
+  {
+    "origin": "IAX",
+    "destination": "LAX",
+    "flight_count": 17
+  },
+  {
+    "origin": "SAX",
+    "destination": "IAX",
+    "flight_count": 15
+  },
+  {
+    "origin": "IAX",
+    "destination": "EWX",
+    "flight_count": 14
+  }
+]

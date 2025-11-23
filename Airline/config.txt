@@ -1,3 +1,4 @@
-URI=neo4j://localhost:7687
-USERNAME=neo4j
-PASSWORD=your_password
+[neo4j]
+uri=neo4j+s://bad7cdaa.databases.neo4j.io
+username=neo4j
+password=5ilzgvR5EGYUbo2-VDayy8XL61l6Wt8m7C0GhfIlNVo

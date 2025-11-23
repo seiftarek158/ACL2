@@ -1,0 +1,30 @@
+﻿[
+  {
+    "loyalty_level": "global services",
+    "avg_actual_flown_miles": 2648.083333333333
+  },
+  {
+    "loyalty_level": "premier gold",
+    "avg_actual_flown_miles": 2461.018518518519
+  },
+  {
+    "loyalty_level": "premier platinum",
+    "avg_actual_flown_miles": 2420.5714285714294
+  },
+  {
+    "loyalty_level": "non-elite",
+    "avg_actual_flown_miles": 2254.072
+  },
+  {
+    "loyalty_level": "premier silver",
+    "avg_actual_flown_miles": 2068.673529411763
+  },
+  {
+    "loyalty_level": "NBK",
+    "avg_actual_flown_miles": 1989.0
+  },
+  {
+    "loyalty_level": "premier 1k",
+    "avg_actual_flown_miles": 1897.6666666666672
+  }
+]

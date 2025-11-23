@@ -1,0 +1,42 @@
+﻿[
+  {
+    "flight_id": 2442,
+    "avg_arrival_delay": -99.0
+  },
+  {
+    "flight_id": 274,
+    "avg_arrival_delay": -60.0
+  },
+  {
+    "flight_id": 425,
+    "avg_arrival_delay": -59.0
+  },
+  {
+    "flight_id": 982,
+    "avg_arrival_delay": -46.0
+  },
+  {
+    "flight_id": 120,
+    "avg_arrival_delay": -45.0
+  },
+  {
+    "flight_id": 1237,
+    "avg_arrival_delay": -44.0
+  },
+  {
+    "flight_id": 894,
+    "avg_arrival_delay": -42.5
+  },
+  {
+    "flight_id": 3546,
+    "avg_arrival_delay": -42.0
+  },
+  {
+    "flight_id": 942,
+    "avg_arrival_delay": -41.333333333333336
+  },
+  {
+    "flight_id": 828,
+    "avg_arrival_delay": -41.0
+  }
+]
