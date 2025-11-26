@@ -50,8 +50,7 @@ def create_journeys_batch(tx, journeys):
 def create_flights_batch(tx, flights):
     tx.run("""
         UNWIND $flights AS f
-        MERGE (flight:Flight {flight_number: f.flight_number})
-        ON CREATE SET flight.fleet_type_description = f.fleet_type_description
+        MERGE (:Flight {flight_number: f.flight_number, fleet_type_description: f.fleet_type_description})
     """, flights=flights)
 
 def create_airports_batch(tx, airports):
@@ -73,14 +72,14 @@ def create_on_relationships_batch(tx, relationships):
     tx.run("""
         UNWIND $relationships AS r
         MATCH (j:Journey {feedback_ID: r.feedback_ID})
-        MATCH (f:Flight {flight_number: r.flight_number})
+        MATCH (f:Flight {flight_number: r.flight_number, fleet_type_description: r.fleet_type_description})
         MERGE (j)-[:ON]->(f)
     """, relationships=relationships)
 
 def create_departs_from_relationships_batch(tx, relationships):
     tx.run("""
         UNWIND $relationships AS r
-        MATCH (f:Flight {flight_number: r.flight_number})
+        MATCH (f:Flight {flight_number: r.flight_number, fleet_type_description: r.fleet_type_description})
         MATCH (a:Airport {station_code: r.station_code})
         MERGE (f)-[:DEPARTS_FROM]->(a)
     """, relationships=relationships)
@@ -88,13 +87,16 @@ def create_departs_from_relationships_batch(tx, relationships):
 def create_arrives_at_relationships_batch(tx, relationships):
     tx.run("""
         UNWIND $relationships AS r
-        MATCH (f:Flight {flight_number: r.flight_number})
+        MATCH (f:Flight {flight_number: r.flight_number, fleet_type_description: r.fleet_type_description})
         MATCH (a:Airport {station_code: r.station_code})
         MERGE (f)-[:ARRIVES_AT]->(a)
     """, relationships=relationships)
 
 csv_path = os.path.join(os.path.dirname(__file__), "Airline_surveys_sample.csv")
 df = pd.read_csv(csv_path)
+
+# Replace NaN values with None for proper Neo4j handling
+df = df.replace({np.nan: None})
 
 # Clear existing data
 print("Clearing existing data from database...")
@@ -157,8 +159,8 @@ print("Creating relationships in batches...")
 # Prepare batched data for relationships
 took_rels = []
 on_rels = []
-departs_rels = []
-arrives_rels = []
+departs_rels_set = set()
+arrives_rels_set = set()
 
 for index, row in df.iterrows():
     took_rels.append({
@@ -167,16 +169,38 @@ for index, row in df.iterrows():
     })
     on_rels.append({
         'feedback_ID': row['feedback_ID'],
-        'flight_number': row['flight_number']
-    })
-    departs_rels.append({
         'flight_number': row['flight_number'],
-        'station_code': row['origin_station_code']
+        'fleet_type_description': row['fleet_type_description']
     })
-    arrives_rels.append({
-        'flight_number': row['flight_number'],
-        'station_code': row['destination_station_code']
-    })
+    # Use tuples for deduplication of flight-airport relationships
+    departs_rels_set.add((
+        row['flight_number'],
+        row['fleet_type_description'],
+        row['origin_station_code']
+    ))
+    arrives_rels_set.add((
+        row['flight_number'],
+        row['fleet_type_description'],
+        row['destination_station_code']
+    ))
+
+# Convert sets back to list of dicts
+departs_rels = [
+    {
+        'flight_number': flight_num,
+        'fleet_type_description': fleet_type,
+        'station_code': station
+    }
+    for flight_num, fleet_type, station in departs_rels_set
+]
+arrives_rels = [
+    {
+        'flight_number': flight_num,
+        'fleet_type_description': fleet_type,
+        'station_code': station
+    }
+    for flight_num, fleet_type, station in arrives_rels_set
+]
 
 # Create relationships in batches
 with driver.session() as session:

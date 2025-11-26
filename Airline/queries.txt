@@ -14,3 +14,27 @@ RETURN f.flight_number as flight_id,
       count(person) as passenger_count
 ORDER BY passenger_count DESC
 LIMIT 10 
+
+//3. Query 3
+
+MATCH(person:Passenger)-[:TOOK]->(j:Journey) 
+WHERE j.number_of_legs > 1
+RETURN person.generation AS generation,
+      count(j.number_of_legs) AS multi_leg_count,
+      avg(j.food_satisfaction_score) AS avg_score 
+ORDER BY multi_leg_count DESC
+
+//4. Query 4
+
+MATCH(j:Journey)-[:ON]->(f:Flight)
+RETURN f.flight_number AS flight_id,
+      avg(j.arrival_delay_minutes) AS avg_arrival_delay
+ORDER BY avg_arrival_delay ASC
+LIMIT 10
+
+//5. Query 5
+
+MATCH(person:Passenger)-[:TOOK]->(j:Journey) 
+RETURN person.loyalty_program_level AS loyalty_level,
+      avg(j.actual_flown_miles) AS avg_actual_flown_miles
+ORDER BY avg_actual_flown_miles DESC

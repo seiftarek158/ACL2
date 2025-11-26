@@ -1,44 +1,34 @@
-Overall Satisfaction Score Calculation Rule:
+Cypher Query Implementation:
 
-overall_satisfaction_score = 0.5*food + 0.35*delay_score + 0.1*legs_score + 0.05*miles_score
+MATCH (p:Passenger)-[:TOOK]->(j:Journey)
+WITH p, j,
+     j.food_satisfaction_score AS food_score,
 
-Component Calculations:
+     5 - CASE
+         WHEN round(toFloat(abs(j.arrival_delay_minutes)) / 20.0, 1) > 5 THEN 5.0
+         WHEN round(toFloat(abs(j.arrival_delay_minutes)) / 20.0, 1) < 0 THEN 0.0
+         ELSE round(toFloat(abs(j.arrival_delay_minutes)) / 20.0, 1)
+     END AS delay_score,
 
-1. Food Score:
-   food = Journey.food_satisfaction_score
-   (Direct value from 1-5)
+     5 - CASE
+         WHEN round(toFloat(j.number_of_legs) * 1.5, 1) > 5 THEN 5.0
+         WHEN round(toFloat(j.number_of_legs) * 1.5, 1) < 0 THEN 0.0
+         ELSE round(toFloat(j.number_of_legs) * 1.5, 1)
+     END AS legs_score,
 
-2. Delay Score:
-   delay_score = 5 - clamp(abs(arrival_delay_minutes)/20, 0, 5)
-   where (abs(arrival_delay_minutes)/20) is rounded to one decimal place
+     5 - CASE
+         WHEN round(toFloat(j.actual_flown_miles) / 3000.0, 1) > 5 THEN 5.0
+         WHEN round(toFloat(j.actual_flown_miles) / 3000.0, 1) < 0 THEN 0.0
+         ELSE round(toFloat(j.actual_flown_miles) / 3000.0, 1)
+     END AS miles_score
 
-   Implementation:
-   - Calculate: abs(arrival_delay_minutes) / 20.0
-   - Round to 1 decimal place
-   - Clamp between 0 and 5 (if > 5, use 5; if < 0, use 0)
-   - Subtract from 5
+WITH p, j,
+     0.5 * food_score +
+     0.35 * delay_score +
+     0.1 * legs_score +
+     0.05 * miles_score AS overall_satisfaction_score
 
-3. Legs Score:
-   legs_score = 5 - clamp(number_of_legs * 1.5, 0, 5)
-   where (number_of_legs * 1.5) is rounded to one decimal place
 
-   Implementation:
-   - Calculate: number_of_legs * 1.5
-   - Round to 1 decimal place
-   - Clamp between 0 and 5 (if > 5, use 5; if < 0, use 0)
-   - Subtract from 5
+WHERE overall_satisfaction_score > 3
 
-4. Miles Score:
-   miles_score = 5 - clamp(actual_flown_miles / 3000, 0, 5)
-   where (actual_flown_miles / 3000) is rounded to one decimal place
-
-   Implementation:
-   - Calculate: actual_flown_miles / 3000.0
-   - Round to 1 decimal place
-   - Clamp between 0 and 5 (if > 5, use 5; if < 0, use 0)
-   - Subtract from 5
-
-Final Query:
-Count DISTINCT passengers where overall_satisfaction_score > 3
-
-Expected Result: 1856 passengers
+RETURN count(p) AS passenger_count
