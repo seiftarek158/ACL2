@@ -23,10 +23,10 @@ WITH p, j,
      END AS miles_score
 
 WITH p, j,
-     0.5 * food_score +
+     round(0.5 * food_score +
      0.35 * delay_score +
      0.1 * legs_score +
-     0.05 * miles_score AS overall_satisfaction_score
+     0.05 * miles_score,1) AS overall_satisfaction_score
 
 
 WHERE overall_satisfaction_score > 3
