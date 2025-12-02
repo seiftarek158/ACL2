@@ -11,7 +11,6 @@ nlp = spacy.load("en_core_web_sm")
 from neo4j import GraphDatabase
 import os
 
-# Read simple KEY=VALUE config file
 config_path = os.path.join(os.path.dirname(__file__), "config.txt")
 uri = None
 username = None
@@ -32,7 +31,6 @@ if os.path.exists(config_path):
                 elif key == 'PASSWORD':
                     password = value
 
-# Fallback to environment variables if config file is missing or incomplete
 uri = uri 
 username = username 
 password = password 
@@ -104,10 +102,10 @@ def create_arrives_at_relationships_batch(tx, relationships):
 csv_path = os.path.join(os.path.dirname(__file__), "Airline_surveys_sample.csv")
 df = pd.read_csv(csv_path)
 
-# Replace NaN values with None for proper Neo4j handling
+
 df = df.replace({np.nan: None})
 
-# Clear existing data
+
 print("Clearing existing data from database...")
 with driver.session() as session:
     session.run("MATCH (n) DETACH DELETE n")
@@ -116,7 +114,7 @@ print("Database cleared.")
 BATCH_SIZE = 500
 print(f"Loading {len(df)} rows from CSV...")
 
-# Prepare batched data for nodes
+
 passengers = []
 journeys = []
 flights = []
@@ -146,7 +144,7 @@ for index, row in df.iterrows():
 airports = [{'station_code': code} for code in airports]
 
 print("Creating nodes in batches...")
-# Create nodes in batches
+
 with driver.session() as session:
     for i in range(0, len(passengers), BATCH_SIZE):
         session.execute_write(create_passengers_batch, passengers[i:i+BATCH_SIZE])
@@ -165,7 +163,7 @@ with driver.session() as session:
         print(f"Created airports batch {i//BATCH_SIZE + 1}/{(len(airports)-1)//BATCH_SIZE + 1}")
 
 print("Creating relationships in batches...")
-# Prepare batched data for relationships
+
 took_rels = []
 on_rels = []
 departs_rels_set = set()
@@ -181,7 +179,6 @@ for index, row in df.iterrows():
         'flight_number': row['flight_number'],
         'fleet_type_description': row['fleet_type_description']
     })
-    # Use tuples for deduplication of flight-airport relationships
     departs_rels_set.add((
         row['flight_number'],
         row['fleet_type_description'],
@@ -193,7 +190,7 @@ for index, row in df.iterrows():
         row['destination_station_code']
     ))
 
-# Convert sets back to list of dicts
+
 departs_rels = [
     {
         'flight_number': flight_num,
@@ -211,7 +208,7 @@ arrives_rels = [
     for flight_num, fleet_type, station in arrives_rels_set
 ]
 
-# Create relationships in batches
+
 with driver.session() as session:
     for i in range(0, len(took_rels), BATCH_SIZE):
         session.execute_write(create_took_relationships_batch, took_rels[i:i+BATCH_SIZE])
