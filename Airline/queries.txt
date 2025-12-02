@@ -11,8 +11,8 @@ LIMIT 5
 
 MATCH(person:Passenger)-[:TOOK]->(j:Journey)-[:ON]->(f:Flight)
 RETURN f.flight_number as flight_id,
-      count(person) as passenger_count
-ORDER BY passenger_count DESC
+      count(person) as feedback_count
+ORDER BY feedback_count DESC
 LIMIT 10 
 
 //3. Query 3
