@@ -10,18 +10,27 @@ nlp = spacy.load("en_core_web_sm")
 
 from neo4j import GraphDatabase
 import os
-from configparser import ConfigParser
-config = ConfigParser()
+
+# Read simple KEY=VALUE config file
 config_path = os.path.join(os.path.dirname(__file__), "config.txt")
+uri = None
+username = None
+password = None
+
 if os.path.exists(config_path):
-    config.read(config_path)
-    uri = config.get("neo4j", "uri", fallback=None)
-    username = config.get("neo4j", "username", fallback=None)
-    password = config.get("neo4j", "password", fallback=None)
-else:
-    uri = None
-    username = None
-    password = None
+    with open(config_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if '=' in line and not line.startswith('#'):
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+                if key == 'URI':
+                    uri = value
+                elif key == 'USERNAME':
+                    username = value
+                elif key == 'PASSWORD':
+                    password = value
 
 # Fallback to environment variables if config file is missing or incomplete
 uri = uri or os.getenv("NEO4J_URI")
