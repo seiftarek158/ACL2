@@ -33,12 +33,12 @@ if os.path.exists(config_path):
                     password = value
 
 # Fallback to environment variables if config file is missing or incomplete
-uri = uri or os.getenv("NEO4J_URI")
-username = username or os.getenv("NEO4J_USERNAME")
-password = password or os.getenv("NEO4J_PASSWORD")
+uri = uri 
+username = username 
+password = password 
 
 if not all([uri, username, password]):
-    raise RuntimeError("Neo4j credentials not found. Provide a config.ini [neo4j] section or set NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD environment variables.")
+    raise RuntimeError("Neo4j credentials not found. Provide a config.txt in same directory.")
 driver = GraphDatabase.driver(uri, auth=(username, password))
 
 # Batched functions for creating nodes
