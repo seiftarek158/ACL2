@@ -1,5 +1,3 @@
-Cypher Query Implementation:
-
 MATCH (p:Passenger)-[:TOOK]->(j:Journey)
 WITH p, j,
      j.food_satisfaction_score AS food_score,
