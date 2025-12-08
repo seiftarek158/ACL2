@@ -3,7 +3,6 @@ import spacy
 from neo4j import GraphDatabase 
 from scipy.sparse import hstack 
 import numpy as np 
-from collections import Counter, defaultdict 
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -39,7 +38,7 @@ if not all([uri, username, password]):
     raise RuntimeError("Neo4j credentials not found. Provide a config.txt in same directory.")
 driver = GraphDatabase.driver(uri, auth=(username, password))
 
-# Batched functions for creating nodes
+
 def create_passengers_batch(tx, passengers):
     tx.run("""
         UNWIND $passengers AS p
@@ -66,7 +65,7 @@ def create_airports_batch(tx, airports):
         MERGE (:Airport {station_code: a.station_code})
     """, airports=airports)
 
-# Batched functions for creating relationships
+
 def create_took_relationships_batch(tx, relationships):
     tx.run("""
         UNWIND $relationships AS r
