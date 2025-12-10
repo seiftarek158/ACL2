@@ -201,6 +201,12 @@ def create_vector_store_huggingface(documents: List[Document],
                                     model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> FAISS:
     """
     Model 1: Create FAISS vector store using HuggingFace embeddings (free, local).
+    other embedding models that can be used include:
+    - "sentence-transformers/all-mpnet-base-v2" slower but more accurate
+    - "intfloat/e5-base-v2" good balance of speed and accuracy
+    Args:
+        documents: List of LangChain Document objects
+        model_name: HuggingFace embedding model name
     """
     print(f"Creating embeddings with HuggingFace model: {model_name}...")
 
