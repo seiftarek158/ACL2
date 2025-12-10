@@ -13,42 +13,9 @@ import json
 import sys
 from neo4j import GraphDatabase
 from typing import List, Dict, Any
-
-# Set environment variables BEFORE any imports that might load PyTorch/TensorFlow
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'  # Fix PyTorch DLL issues on Windows
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['MKL_NUM_THREADS'] = '1'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['TOKENIZERS_PARALLELISM'] = 'false'
-
-# Try to use sentence-transformers directly (more stable on Windows)
-USE_SENTENCE_TRANSFORMERS = False
-try:
-    from sentence_transformers import SentenceTransformer
-    USE_SENTENCE_TRANSFORMERS = True
-    print("Using sentence-transformers directly (recommended for Windows)")
-except ImportError:
-    print("sentence-transformers not found, using LangChain wrapper")
-    pass
-
-# Now import LangChain components
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-
-# Import embeddings based on availability
-if not USE_SENTENCE_TRANSFORMERS:
-    try:
-        from langchain_huggingface import HuggingFaceEmbeddings
-    except ImportError:
-        from langchain_community.embeddings import HuggingFaceEmbeddings
-
-# Skip transformers for text generation - use template-based descriptions
-TRANSFORMERS_AVAILABLE = False
-print("Using template-based descriptions (simpler, no dependencies)")
-HUGGINGFACE_API_TOKEN = "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"
-# ============================================================================
-# Configuration
-# ============================================================================
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 config_path = os.path.join(os.path.dirname(__file__), "..", "Airline", "config.txt")
 uri = None
