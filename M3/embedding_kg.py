@@ -128,7 +128,7 @@ def generate_llm_description_hf(journey: Dict[str, Any], generator) -> str:
         prompt = create_prompt_for_journey(journey)
 
         # Generate response
-        result = generator(prompt, max_length=300, num_return_sequences=1, temperature=0.7)
+        result = generator(prompt, max_length=1024, num_return_sequences=1, temperature=0.5)
         response = result[0]['generated_text'].strip()
 
         # If response is too short or empty, use fallback
@@ -225,23 +225,19 @@ def create_vector_store_huggingface(documents: List[Document],
 # ============================================================================
 # Step 6: Semantic Search with LangChain
 # ============================================================================
-
-def semantic_search_langchain(query: str, vector_store: FAISS, k: int = 5):
+def intialize_retriever(vector_store: FAISS, k: int = 5):
     """
-    Perform semantic similarity search using LangChain's vector store.
+    Initialize a retriever from the FAISS vector store.
 
     Args:
-        query: Natural language query
         vector_store: FAISS vector store
         k: Number of results to return
-
-    Returns:
-        List of (Document, similarity_score) tuples
-    """
-    # LangChain's similarity search with scores
-    results = vector_store.similarity_search_with_score(query, k=k)
-    return results
-
+"""
+    retriever = vector_store.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": k}
+    )
+    return retriever
 
 # ============================================================================
 # Main Execution
