@@ -246,6 +246,7 @@ Your analysis:"""
     
     try:
         response = client.chat_completion(
+            model="meta-llama/Llama-3.2-3B-Instruct",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=300,
             temperature=0.1,
@@ -387,6 +388,7 @@ def generate_cypher_from_nl(user_query: str, client: InferenceClient, max_retrie
     for attempt in range(max_retries):
         try:
             response = client.chat_completion(
+                model="meta-llama/Llama-3.2-3B-Instruct",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
                 temperature=0.1,

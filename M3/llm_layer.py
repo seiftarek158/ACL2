@@ -45,6 +45,14 @@ from embedding_kg import (
     generate_simple_description,
     intialize_retriever
 )
+# Import intent classification and query execution functions from query_classifier
+from query_classifier import (
+    preprocess_query_keywords,
+    classify_intent_and_extract_entities,
+    try_template_query,
+    generate_cypher_from_nl,
+    execute_cypher_query
+)
 
 # Neo4j connection
 from neo4j import GraphDatabase
@@ -283,19 +291,29 @@ Please provide a clear, concise answer:"""
         
         # Add baseline results (structured Cypher query results)
         if retrieval_result.baseline_results:
-            context_parts.append("=== Structured Query Results (Knowledge Graph) ===")
+            context_parts.append("=== Knowledge Graph Query Results ===")
+            context_parts.append(f"The user's question was classified as intent: '{retrieval_result.query_intent}'")
+            if retrieval_result.entities:
+                context_parts.append(f"Extracted parameters: {retrieval_result.entities}")
+            context_parts.append(f"The following {len(retrieval_result.baseline_results)} result(s) were returned from the knowledge graph query:")
+            context_parts.append("")
             for i, result in enumerate(retrieval_result.baseline_results[:10], 1):
                 context_parts.append(f"{i}. {self._format_result(result)}")
+            if len(retrieval_result.baseline_results) > 10:
+                context_parts.append(f"... and {len(retrieval_result.baseline_results) - 10} more results")
+        else:
+            if retrieval_result.query_intent:
+                context_parts.append("=== Knowledge Graph Query Results ===")
+                context_parts.append(f"The user's question was classified as intent: '{retrieval_result.query_intent}'")
+                if retrieval_result.entities:
+                    context_parts.append(f"Extracted parameters: {retrieval_result.entities}")
+                context_parts.append("No results were returned from the knowledge graph query.")
         
         # Add embedding results (semantic search results)
         if retrieval_result.embedding_results:
             context_parts.append("\n=== Semantic Search Results (Similar Journeys) ===")
             for i, result in enumerate(retrieval_result.embedding_results[:5], 1):
                 context_parts.append(f"{i}. {self._format_embedding_result(result)}")
-        
-        # Add query metadata
-        if retrieval_result.query_intent:
-            context_parts.append(f"\n[Query Intent: {retrieval_result.query_intent}]")
         
         return "\n".join(context_parts)
     
@@ -458,141 +476,139 @@ class KnowledgeGraphRetriever:
 
 
 # ============================================================================
-# Intent Selector (Manual selection from available intents)
+# Intent Classifier (Using imported functions from query_classifier.py)
 # ============================================================================
 
-class IntentSelector:
+class IntentClassifier:
     """
-    Allows user to manually select an intent from available query templates.
-    This replaces automatic classification while the ML classifier is being developed.
+    Automatically classifies user intent, extracts entities, and executes queries.
+    Uses imported functions from query_classifier.py - follows same flow as interactive_mode.
     """
     
-    def __init__(self):
-        """Initialize with available intents from QueryTemplateLibrary."""
-        self.library = QueryTemplateLibrary()
-        self.intents = self.library.get_available_intents()
-        
-        # Group intents by category for better UX
-        self.intent_categories = {
-            "Route Analysis": [
-                "destination_analysis",
-                "departure_analysis",
-                "best_route_delay_performance",
-                "worst_route_delay_performance"
-            ],
-            "Delay Analysis": [
-                "flight_delay_analysis_highest",
-                "flight_delay_analysis_lowest",
-            ],
-            "Passenger Feedback": [
-                "passenger_feedback_analysis"
-            ],
-            "Food Satisfaction": [
-                "passenger_generation_food_satisfaction_all",
-                "passenger_generation_food_satisfaction_specific",
-                "fleet_type_food_satisfaction_all",
-                "fleet_type_food_satisfaction_specific"
-            ],
-            "Loyalty & Programs": [
-                "loyalty_program_satisfaction_all",
-                "loyalty_program_distribution",
-                "generation_satisfaction_all"
-            ],
-            "Demographics & Fleet": [
-                "passenger_generation_analysis",
-                "fleet_type_mileage"
-            ]
-        }
-
-    # TO BE REPLACED WITH ACTUAL INTENT LOGIC FROM IBRA
-    def select_intent(self) -> Tuple[Optional[str], Dict[str, Any]]:
+    def __init__(self, hf_api_key: str = None, config_path: str = None):
+        """Initialize with HuggingFace client and Neo4j driver."""
+        self.hf_api_key = hf_api_key or os.getenv("HF_API_KEY")
+        self.config_path = config_path or os.path.join(os.path.dirname(__file__), "config.txt")
+        self._initialize_client()
+        self._initialize_driver()
+    
+    def _initialize_client(self):
+        """Initialize the HuggingFace inference client."""
+        try:
+            from huggingface_hub import InferenceClient
+            self.client = InferenceClient(token=self.hf_api_key) if self.hf_api_key else InferenceClient()
+        except ImportError:
+            print("Warning: huggingface_hub not installed. LLM classification disabled.")
+            self.client = None
+    
+    def _initialize_driver(self):
+        """Initialize Neo4j driver for query execution."""
+        try:
+            uri = username = password = None
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if '=' in line and not line.startswith('#'):
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            value = value.strip()
+                            if key == 'URI':
+                                uri = value
+                            elif key == 'USERNAME':
+                                username = value
+                            elif key == 'PASSWORD':
+                                password = value
+            
+            if uri and username and password:
+                self.driver = GraphDatabase.driver(uri, auth=(username, password))
+            else:
+                print("Warning: Neo4j config incomplete. Query execution disabled.")
+                self.driver = None
+        except Exception as e:
+            print(f"Warning: Could not initialize Neo4j driver: {e}")
+            self.driver = None
+    
+    def classify_and_execute(self, user_query: str) -> Tuple[Optional[str], Dict[str, Any], List[Dict[str, Any]]]:
         """
-        Display available intents and let user select one.
+        Classify intent, execute the query, and return results.
+        Follows the same flow as interactive_mode in query_classifier.py.
+        
+        Args:
+            user_query: The user's natural language question
         
         Returns:
-            Tuple of (intent, entities)
+            Tuple of (intent, entities, query_results)
         """
-        print("\n" + "-" * 80)
-        print("AVAILABLE QUERY TYPES (INTENTS)")
-        print("-" * 80)
+        print(f"\n🔍 Classifying query: {user_query[:50]}...")
         
-        all_options = {}
-        option_num = 1
+        if not self.client:
+            print("   → No LLM client available")
+            return None, {}, []
         
-        # Display intents by category
-        for category, intents in self.intent_categories.items():
-            print(f"\n📊 {category}:")
-            for intent in intents:
-                if intent in self.intents:
-                    template_info = self.library.get_template_info(intent)
-                    all_options[str(option_num)] = (intent, template_info["description"])
-                    print(f"  {option_num}. {intent}")
-                    print(f"     → {template_info['description']}")
-                    if template_info['required_params']:
-                        print(f"     📝 Parameters: {', '.join(template_info['required_params'])}")
-                    option_num += 1
+        # Step 1: Try template matching (keyword + LLM classification)
+        print("   → Checking for template match...")
+        template_result = try_template_query(user_query, self.client)
         
-        print(f"\n  0. Custom question (no specific intent)")
-        print(f"  q. Exit")
-        
-        # Get user selection
-        choice = input("\nSelect query type (or q to exit): ").strip()
-        
-        if choice == "q":
-            return None, {}
-        
-        if choice == "0":
-            # No specific intent - use general retrieval
-            return None, {}
-        
-        if choice in all_options:
-            intent, _ = all_options[choice]
-            entities = self._get_entity_inputs(intent)
-            return intent, entities
-        
-        print("Invalid choice. Using general retrieval.")
-        return None, {}
-    
-    # TO BE REPLACED WITH ACTUAL INTENT LOGIC FROM IBRA
-    def _get_entity_inputs(self, intent: str) -> Dict[str, Any]:
-        """Get required entity inputs from user for specific intent."""
+        cypher_query = None
+        params = {}
+        intent = None
         entities = {}
-        template_info = self.library.get_template_info(intent)
-        required_params = template_info.get("required_params", [])
         
-        if not required_params:
-            return entities
-        
-        print(f"\n📝 Enter parameters for: {intent}")
-        
-        for param in required_params:
-            # Special handling for specific parameter types
-            if "code" in param:
-                value = input(f"  {param} (e.g., ORD, LAX): ").strip().upper()
-            elif "generation" in param:
-                value = input(f"  {param} (e.g., Millennial, Gen X, Baby Boomer): ").strip()
-            elif "fleet" in param:
-                value = input(f"  {param} (e.g., Boeing 737, Airbus A380): ").strip()
+        if template_result:
+            cypher_query, params = template_result
+            # Extract intent from the matched template
+            keyword_intent, entities = preprocess_query_keywords(user_query)
+            if keyword_intent:
+                intent = keyword_intent
             else:
-                value = input(f"  {param}: ").strip()
+                llm_intent, entities = classify_intent_and_extract_entities(user_query, self.client)
+                intent = llm_intent
+            print(f"   ✓ Template matched: {intent}")
+        else:
+            # Step 2: No template match - generate custom Cypher
+            print("   → No template match - generating custom Cypher...")
+            cypher_query = generate_cypher_from_nl(user_query, self.client)
+            intent = "custom"
             
-            if value:
-                entities[param] = value
+            if cypher_query is None:
+                print("   ✗ Failed to generate Cypher query")
+                return None, {}, []
         
-        # Add optional parameters if provided
-        optional_params = template_info.get("optional_params", [])
-        if optional_params:
-            add_optional = input(f"\nAdd optional parameters? (y/n): ").strip().lower()
-            if add_optional == "y":
-                for param in optional_params:
-                    value = input(f"  {param} (optional): ").strip()
-                    if value:
-                        try:
-                            entities[param] = int(value) if value.isdigit() else value
-                        except:
-                            entities[param] = value
+        # Step 3: Execute the query
+        if not self.driver:
+            print("   → No Neo4j driver available for query execution")
+            return intent, entities, []
         
-        return entities
+        try:
+            print("   → Executing query...")
+            results = execute_cypher_query(self.driver, cypher_query, params)
+            print(f"   ✓ Query returned {len(results)} results")
+            return intent, entities, results
+        except Exception as e:
+            print(f"   ✗ Query execution error: {e}")
+            return intent, entities, []
+    
+    def classify(self, user_query: str) -> Tuple[Optional[str], Dict[str, Any]]:
+        """
+        Legacy method - just classifies without executing.
+        Use classify_and_execute for full pipeline.
+        """
+        keyword_intent, entities = preprocess_query_keywords(user_query)
+        if keyword_intent:
+            return keyword_intent, entities
+        
+        if self.client:
+            llm_intent, llm_entities = classify_intent_and_extract_entities(user_query, self.client)
+            entities.update(llm_entities)
+            return llm_intent, entities
+        
+        return None, entities
+    
+    def close(self):
+        """Close Neo4j driver."""
+        if self.driver:
+            self.driver.close()
 
 
 # ============================================================================
@@ -618,7 +634,8 @@ class AirlineInsightsAssistant:
             config_path: Path to Neo4j config file
         """
         # Initialize components
-        self.selector = IntentSelector()
+        self.config_path = config_path
+        self.classifier = IntentClassifier(config_path=config_path)  # Now handles query execution
         self.retriever = KnowledgeGraphRetriever(config_path=config_path)
         self.prompt_builder = PromptBuilder()
         
@@ -640,17 +657,58 @@ class AirlineInsightsAssistant:
         Returns:
             LLMResponse with the answer
         """
-        # 1. Select intent manually and get entities
-        intent, entities = self.selector.select_intent()
+        # 1. Classify intent, execute query, and get results (like interactive_mode)
+        intent, entities, query_results = self.classifier.classify_and_execute(question)
         
-        # 2. Retrieve knowledge from both sources
-        retrieval_result = self.retriever.retrieve(question, intent, entities)
+        # Log query results
+        print("\n" + "=" * 70)
+        print("📊 QUERY RESULTS (Before passing to LLM)")
+        print("=" * 70)
+        print(f"Intent: {intent}")
+        print(f"Entities: {entities}")
+        print(f"Results count: {len(query_results)}")
+        if query_results:
+            print("-" * 70)
+            for i, result in enumerate(query_results[:10], 1):
+                print(f"  {i}. {result}")
+            if len(query_results) > 10:
+                print(f"  ... and {len(query_results) - 10} more results")
+        else:
+            print("  (No results from query)")
+        print("=" * 70)
         
-        # 3. Build structured prompt
+        # 2. Build retrieval result with query results as baseline
+        retrieval_result = RetrievalResult(
+            baseline_results=query_results,
+            query_intent=intent or "general",
+            entities=entities
+        )
+        
+        # 3. Also get embedding results for additional context
+        if self.retriever.retriever:
+            try:
+                docs = self.retriever.retriever.invoke(question)
+                retrieval_result.embedding_results = [
+                    {"content": doc.page_content, "metadata": doc.metadata}
+                    for doc in docs[:5]
+                ]
+                print(f"\n📚 Embedding results: {len(retrieval_result.embedding_results)} similar journeys found")
+            except Exception as e:
+                print(f"   → Embedding search skipped: {e}")
+        
+        # 4. Build structured prompt with the query results
         context = self.prompt_builder.build_context(retrieval_result)
         context_section, prompt_section = self.prompt_builder.build_prompt(question, context)
         
-        # 4. Generate response
+        # Log context being passed to LLM
+        print("\n" + "-" * 70)
+        print("📝 CONTEXT BEING PASSED TO LLM:")
+        print("-" * 70)
+        print(context[:1000] + "..." if len(context) > 1000 else context)
+        print("-" * 70)
+        
+        # 5. Generate response from LLM
+        print(f"\n🤖 Generating response with {self.providers[provider_index].model_name}...")
         provider = self.providers[provider_index]
         response = provider.generate(prompt_section, context_section)
         
@@ -668,9 +726,26 @@ class AirlineInsightsAssistant:
         """
         responses = []
         
-        # Get shared context for fair comparison
-        intent, entities = self.selector.select_intent()
-        retrieval_result = self.retriever.retrieve(question, intent, entities)
+        # Get shared context for fair comparison (classify and execute once)
+        intent, entities, query_results = self.classifier.classify_and_execute(question)
+        
+        retrieval_result = RetrievalResult(
+            baseline_results=query_results,
+            query_intent=intent or "general",
+            entities=entities
+        )
+        
+        # Add embedding results
+        if self.retriever.retriever:
+            try:
+                docs = self.retriever.retriever.invoke(question)
+                retrieval_result.embedding_results = [
+                    {"content": doc.page_content, "metadata": doc.metadata}
+                    for doc in docs[:5]
+                ]
+            except:
+                pass
+        
         context = self.prompt_builder.build_context(retrieval_result)
         context_section, prompt_section = self.prompt_builder.build_prompt(question, context)
         
@@ -755,8 +830,8 @@ class AirlineInsightsAssistant:
         for question in test_questions:
             print(f"\nBenchmarking question: {question}")
             
-            # Get shared retrieval result
-            intent, entities = self.selector.select_intent()
+            # Get shared retrieval result (auto-classify)
+            intent, entities = self.classifier.classify(question)
             retrieval_result = self.retriever.retrieve(question, intent, entities)
             
             # Compare all models
@@ -795,6 +870,7 @@ class AirlineInsightsAssistant:
     
     def close(self):
         """Close all connections."""
+        self.classifier.close()
         self.retriever.close()
 
 
@@ -802,172 +878,141 @@ class AirlineInsightsAssistant:
 # Main Execution
 # ============================================================================
 
-# def display_welcome():
-#     """Display welcome screen."""
-#     print("=" * 80)
-#     print("🛫 BRITISH AIRWAYS FLIGHT INSIGHTS ASSISTANT 🛫")
-#     print("=" * 80)
-#     print("\nWelcome! This is an interactive chatbot powered by AI to answer your")
-#     print("questions about British Airways flight data, performance, and passenger feedback.")
-#     print()
+def display_welcome():
+    """Display welcome screen."""
+    print("=" * 80)
+    print("🛫 BRITISH AIRWAYS FLIGHT INSIGHTS ASSISTANT 🛫")
+    print("=" * 80)
+    print("\nWelcome! This is an interactive chatbot powered by AI to answer your")
+    print("questions about British Airways flight data, performance, and passenger feedback.")
+    print("\nNow with AUTOMATIC intent classification - just ask your question!")
+    print()
 
 
-# def select_model() -> List[LLMProvider]:
-#     """Let user select which LLM model(s) to use."""
-#     print("\n" + "=" * 80)
-#     print("SELECT LLM MODEL")
-#     print("=" * 80)
+def select_model() -> List[LLMProvider]:
+    """Let user select which LLM model(s) to use."""
+    print("\n" + "=" * 80)
+    print("SELECT LLM MODEL")
+    print("=" * 80)
     
-#     models = {
-#         "1": ("Gemini 2.5 Flash", "gemini"),
-#         "2": ("HuggingFace Gemma 2B", "huggingface-gemma"),
-#         "3": ("HuggingFace Qwen 7B", "huggingface-qwen")
-#     }
+    models = {
+        "1": ("Gemini 2.5 Flash", "gemini"),
+        "2": ("HuggingFace Gemma 2B", "huggingface-gemma"),
+        "3": ("HuggingFace Qwen 7B", "huggingface-qwen")
+    }
     
-#     print("\nAvailable Models:")
-#     for key, (description, _) in models.items():
-#         print(f"  {key}. {description}")
-#     print("  0. Exit")
+    print("\nAvailable Models:")
+    for key, (description, _) in models.items():
+        print(f"  {key}. {description}")
+    print("  0. Exit")
     
-#     choice = input("\nSelect model (0-3): ").strip()
+    choice = input("\nSelect model (0-3): ").strip()
     
-#     if choice == "0":
-#         print("Goodbye!")
-#         return None
+    if choice == "0":
+        print("Goodbye!")
+        return None
     
-#     if choice not in models:
-#         print("Invalid choice. Using Gemini 2.5 Flash by default.")
-#         return [GeminiProvider()]
+    if choice not in models:
+        print("Invalid choice. Using Gemini 2.5 Flash by default.")
+        return [GeminiProvider()]
     
-#     _, model_type = models[choice]
+    _, model_type = models[choice]
     
-#     try:
-#         if model_type == "gemini":
-#             return [GeminiProvider(model="gemini-2.5-flash")]
-#         elif model_type == "huggingface-gemma":
-#             return [HuggingFaceProvider(model="gemma")]
-#         elif model_type == "huggingface-qwen":
-#             return [HuggingFaceProvider(model="qwen")]
-#     except Exception as e:
-#         print(f"Error initializing model: {e}")
-#         print("Falling back to Gemini 2.5 Flash...")
-#         return [GeminiProvider()]
+    try:
+        if model_type == "gemini":
+            return [GeminiProvider(model="gemini-2.5-flash")]
+        elif model_type == "huggingface-gemma":
+            return [HuggingFaceProvider(model="gemma")]
+        elif model_type == "huggingface-qwen":
+            return [HuggingFaceProvider(model="qwen")]
+    except Exception as e:
+        print(f"Error initializing model: {e}")
+        print("Falling back to Gemini 2.5 Flash...")
+        return [GeminiProvider()]
 
 
-# def format_response(response: LLMResponse, show_metadata: bool = False):
-#     """Format and display the LLM response nicely."""
-#     print("\n" + "=" * 80)
-#     print(f"RESPONSE FROM {response.model_name.upper()}")
-#     print("=" * 80)
-#     print(f"\n{response.response_text}")
+def format_response(response: LLMResponse, show_metadata: bool = False):
+    """Format and display the LLM response nicely."""
+    print("\n" + "=" * 80)
+    print(f"RESPONSE FROM {response.model_name.upper()}")
+    print("=" * 80)
+    print(f"\n{response.response_text}")
     
-#     if show_metadata:
-#         print(f"\n{'-' * 80}")
-#         print("METADATA:")
-#         print(f"  Response Time:  {response.response_time:.2f}s")
-#         print(f"  Token Count:    {response.token_count}")
-#         print(f"{'-' * 80}")
+    if show_metadata:
+        print(f"\n{'-' * 80}")
+        print("METADATA:")
+        print(f"  Response Time:  {response.response_time:.2f}s")
+        print(f"  Token Count:    {response.token_count}")
+        print(f"{'-' * 80}")
 
 
-# def compare_responses(responses: List[LLMResponse]):
-#     """Display and compare responses from multiple models."""
-#     print("\n" + "=" * 80)
-#     print("COMPARISON SUMMARY")
-#     print("=" * 80)
+def run_chatbot():
+    """Main chatbot loop with automatic intent classification."""
+    display_welcome()
     
-#     for i, response in enumerate(responses, 1):
-#         print(f"\n[Model {i}: {response.model_name}]")
-#         print(f"  Response Time: {response.response_time:.2f}s")
-#         print(f"  Token Count:   {response.token_count}")
-#         print(f"\n  Answer: {response.response_text[:300]}...")
-        
-#         if response.response_time > 0:
-#             print(f"  Efficiency:    {response.token_count / response.response_time:.0f} tokens/sec")
+    # Select model
+    providers = select_model()
+    if not providers:
+        return
     
-#     print("\n" + "=" * 80)
-
-
-# def run_chatbot():
-#     """Main chatbot loop."""
-#     display_welcome()
+    # Initialize assistant
+    try:
+        assistant = AirlineInsightsAssistant(providers=providers)
+        print(f"\n✓ Initialized with {len(providers)} model(s)")
+        print(f"  Models: {', '.join([p.model_name for p in providers])}")
+        print("\n✓ Automatic intent classification enabled")
+    except Exception as e:
+        print(f"\n✗ Error initializing assistant: {e}")
+        print("\nMake sure:")
+        print("1. GEMINI_API_KEY is set in .env file")
+        print("2. Neo4j is running with data loaded")
+        print("3. Required packages are installed: pip install -r requirements.txt")
+        return
     
-#     # Select model
-#     providers = select_model()
-#     if not providers:
-#         return
-    
-#     # Initialize assistant
-#     try:
-#         assistant = AirlineInsightsAssistant(providers=providers)
-#         print(f"\n✓ Initialized with {len(providers)} model(s)")
-#         print(f"  Models: {', '.join([p.model_name for p in providers])}")
-#     except Exception as e:
-#         print(f"\n✗ Error initializing assistant: {e}")
-#         print("\nMake sure:")
-#         print("1. GEMINI_API_KEY is set in .env file")
-#         print("2. Neo4j is running with data loaded")
-#         print("3. Required packages are installed: pip install -r requirements.txt")
-#         return
-    
-#     # Chat loop
-#     conversation_count = 0
-#     while True:
-#         try:
-#             # Get user question
-#             question = input("\n" + "-" * 80 + "\nEnter your question (or 'q' to exit): ").strip()
-#             if question.lower() == "q":
-#                 break
+    # Chat loop
+    conversation_count = 0
+    while True:
+        try:
+            # Get user question
+            question = input("\n" + "-" * 80 + "\n💬 Enter your question (or 'q' to exit): ").strip()
+            if question.lower() == "q":
+                break
             
-#             if not question:
-#                 print("Please enter a question.")
-#                 continue
+            if not question:
+                print("Please enter a question.")
+                continue
             
-#             conversation_count += 1
-#             print(f"\n⏳ Processing question {conversation_count}...\n")
+            conversation_count += 1
+            print(f"\n⏳ Processing question {conversation_count}...")
             
-#             # Get responses
-#             if len(providers) > 1:
-#                 # Compare models
-#                 responses = assistant.compare_models(question)
-#                 compare_responses(responses)
-#             else:
-#                 # Single model
-#                 response = assistant.answer_question(question)
-#                 format_response(response, show_metadata=True)
+            # Get response (intent classification is now automatic)
+            response = assistant.answer_question(question)
+            format_response(response, show_metadata=True)
             
-#             # Ask if user wants to continue
-#             print("\n" + "-" * 80)
-#             continue_chat = input("Continue chatting? (y/n): ").strip().lower()
-#             if continue_chat != "y":
-#                 break
-        
-#         except KeyboardInterrupt:
-#             print("\n\nChat interrupted by user.")
-#             break
-#         except Exception as e:
-#             print(f"\n✗ Error processing question: {e}")
-#             import traceback
-#             traceback.print_exc()
-#             retry = input("Try again? (y/n): ").strip().lower()
-#             if retry != "y":
-#                 break
+        except KeyboardInterrupt:
+            print("\n\nChat interrupted by user.")
+            break
+        except Exception as e:
+            print(f"\n✗ Error processing question: {e}")
+            import traceback
+            traceback.print_exc()
     
-#     # Cleanup
-#     assistant.close()
-#     print("\n" + "=" * 80)
-#     print(f"Chat ended. Total questions asked: {conversation_count}")
-#     print("Thank you for using British Airways Flight Insights Assistant!")
-#     print("=" * 80 + "\n")
+    # Cleanup
+    assistant.close()
+    print("\n" + "=" * 80)
+    print(f"Chat ended. Total questions asked: {conversation_count}")
+    print("Thank you for using British Airways Flight Insights Assistant!")
+    print("=" * 80 + "\n")
 
 
-# if __name__ == "__main__":
-#     try:
-#         run_chatbot()
-#     except Exception as e:
-#         print(f"Fatal Error: {e}")
-#         import traceback
-#         traceback.print_exc()
-#         print("\nMake sure:")
-#         print("1. GEMINI_API_KEY is set in .env file")
-#         print("2. Neo4j is running with data loaded")
-#         print("3. Required packages are installed: pip install -r M3/requirements.txt")
+if __name__ == "__main__":
+    try:
+        run_chatbot()
+    except Exception as e:
+        print(f"Fatal Error: {e}")
+        import traceback
+        traceback.print_exc()
+        print("\nMake sure:")
+        print("1. GEMINI_API_KEY is set in .env file")
+        print("2. Neo4j is running with data loaded")
+        print("3. Required packages are installed: pip install -r M3/requirements.txt")
