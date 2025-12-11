@@ -31,7 +31,7 @@ class QueryTemplateLibrary:
                 """,
                 "required_params": ["origin_code"],
                 "optional_params": ["limit"],
-                "description": "What are the most common destination airports from a specific origin?"
+                "description": "What destinations can you fly to FROM a specific origin airport? (e.g., 'destinations from LAX')"
             },
 
             # Q2: Departure Airport Analysis
@@ -42,7 +42,7 @@ class QueryTemplateLibrary:
                 """,
                 "required_params": ["dest_code"],
                 "optional_params": ["limit"],
-                "description": "What are the most common departure airports for a specific destination?"
+                "description": "What departure airports fly TO a specific destination? (e.g., 'departures to LAX' or 'airports that fly to LAX')"
             },
 
             # Q3: Passenger Feedback Analysis
@@ -66,7 +66,7 @@ class QueryTemplateLibrary:
                 "query": """
                     MATCH (origin:Airport {station_code: $origin_code})<-[:DEPARTS_FROM]-(f:Flight)-[:ARRIVES_AT]->(dest:Airport {station_code: $dest_code})
                     RETURN f.flight_number AS flight_number,
-                           f.fleet_type_description AS fleet_type,
+                           f.fleet_type_description AS fleet_type
                 """,
                 "required_params": ["origin_code", "dest_code"],
                 "optional_params": [],
@@ -139,6 +139,27 @@ class QueryTemplateLibrary:
                 "optional_params": ["top_n"],
                 "description": "Which routes have the worst delay performance?",
                 "default_params": {"top_n": 10}
+            },
+
+            # Q8: Route-Specific Delay Probability Analysis
+            "route_delay_probability": {
+                "query": """
+                    MATCH (origin:Airport {station_code: $origin_code})<-[:DEPARTS_FROM]-(f:Flight)-[:ARRIVES_AT]->(dest:Airport {station_code: $dest_code})
+                    MATCH (j:Journey)-[:ON]->(f)
+                    WHERE j.arrival_delay_minutes IS NOT NULL
+                    WITH COUNT(j) AS total_flights,
+                         COUNT(CASE WHEN j.arrival_delay_minutes > 0 THEN 1 END) AS delayed_flights,
+                         AVG(j.arrival_delay_minutes) AS avg_delay,
+                         AVG(CASE WHEN j.arrival_delay_minutes > 0 THEN j.arrival_delay_minutes END) AS avg_delay_when_delayed
+                    RETURN total_flights,
+                           delayed_flights,
+                           round(toFloat(delayed_flights) / total_flights * 100.0, 2) AS delay_probability_percent,
+                           round(avg_delay, 2) AS average_delay_minutes,
+                           round(avg_delay_when_delayed, 2) AS average_delay_when_delayed_minutes
+                """,
+                "required_params": ["origin_code", "dest_code"],
+                "optional_params": [],
+                "description": "What is the probability/likelihood of delays on a specific route (origin to destination)?"
             },
 
             # Q9: Passenger Generation Food Satisfaction Analysis (All Generations)
@@ -287,6 +308,40 @@ class QueryTemplateLibrary:
                 "required_params": [],
                 "optional_params": [],
                 "description": "What are the total miles for all different fleet types?"
+            },
+
+            # Q15: Most Popular Flights by Generation
+            "popular_flights_by_generation": {
+                "query": """
+                    MATCH (p:Passenger {generation: $generation})-[:TOOK]->(j:Journey)-[:ON]->(f:Flight)
+                    RETURN f.flight_number AS flight_number,
+                           f.fleet_type_description AS fleet_type,
+                           COUNT(j) AS passenger_count
+                    ORDER BY passenger_count DESC
+                    LIMIT $limit
+                """,
+                "required_params": ["generation"],
+                "optional_params": ["limit"],
+                "description": "What are the most popular flights for a specific passenger generation (Boomer, Gen X, Millennial, Gen Z, Silent Generation)?",
+                "default_params": {"limit": 10}
+            },
+
+            # Q16: Most Popular Routes by Generation
+            "popular_routes_by_generation": {
+                "query": """
+                    MATCH (p:Passenger {generation: $generation})-[:TOOK]->(j:Journey)-[:ON]->(f:Flight)
+                    MATCH (f)-[:DEPARTS_FROM]->(origin:Airport)
+                    MATCH (f)-[:ARRIVES_AT]->(dest:Airport)
+                    RETURN origin.station_code AS origin,
+                           dest.station_code AS destination,
+                           COUNT(j) AS passenger_count
+                    ORDER BY passenger_count DESC
+                    LIMIT $limit
+                """,
+                "required_params": ["generation"],
+                "optional_params": ["limit"],
+                "description": "What are the most popular routes (origin to destination) for a specific passenger generation?",
+                "default_params": {"limit": 10}
             }
         }
 
@@ -301,6 +356,7 @@ class QueryTemplateLibrary:
             "flight_delay_analysis_lowest": "flight_delay_analysis_lowest",
             "best_route_delay_performance": "best_route_delay_performance",
             "worst_route_delay_performance": "worst_route_delay_performance",
+            "route_delay_probability": "route_delay_probability",
             "passenger_generation_food_satisfaction_all": "passenger_generation_food_satisfaction_all",
             "passenger_generation_food_satisfaction_specific": "passenger_generation_food_satisfaction_specific",
             "fleet_type_food_satisfaction_all": "fleet_type_food_satisfaction_all",
@@ -309,7 +365,9 @@ class QueryTemplateLibrary:
             "generation_satisfaction_all": "generation_satisfaction_all",
             "loyalty_program_distribution": "loyalty_program_distribution",
             "passenger_generation_analysis": "passenger_generation_analysis",
-            "fleet_type_mileage": "fleet_type_mileage"
+            "fleet_type_mileage": "fleet_type_mileage",
+            "popular_flights_by_generation": "popular_flights_by_generation",
+            "popular_routes_by_generation": "popular_routes_by_generation"
         }
 
     def get_query(self, intent: str, entities: Dict[str, Any] = None) -> Tuple[str, Dict[str, Any]]:
