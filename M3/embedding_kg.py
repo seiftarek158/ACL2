@@ -11,11 +11,24 @@ Uses:
 import os
 import json
 import sys
+import warnings
+
+# Fix protobuf compatibility issue BEFORE importing any packages that use it
+os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
+
+# Suppress TensorFlow CUDA warnings
+warnings.filterwarnings('ignore', category=Warning)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 from neo4j import GraphDatabase
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-from langchain_community.embeddings import HuggingFaceEmbeddings
+
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+except ImportError:
+    from langchain_community.embeddings import HuggingFaceEmbeddings
 
 config_path = os.path.join(os.path.dirname(__file__), "..", "Airline", "config.txt")
 uri = None
@@ -222,9 +235,6 @@ def create_vector_store_huggingface(documents: List[Document],
     return vector_store
 
 
-# ============================================================================
-# Step 6: Semantic Search with LangChain
-# ============================================================================
 def intialize_retriever(vector_store: FAISS, k: int = 5):
     """
     Initialize a retriever from the FAISS vector store.
@@ -232,7 +242,7 @@ def intialize_retriever(vector_store: FAISS, k: int = 5):
     Args:
         vector_store: FAISS vector store
         k: Number of results to return
-"""
+    """
     retriever = vector_store.as_retriever(
         search_type="similarity",
         search_kwargs={"k": k}
@@ -295,23 +305,6 @@ def main():
         "poor service quality on long routes",
         "operational efficiency problems"
     ]
-
-    for query in test_queries:
-        print(f"\n{'='*80}")
-        print(f"Query: '{query}'")
-        print(f"{'='*80}")
-
-        # Search with HuggingFace embeddings
-        print("\n[Model 1: HuggingFace Results]")
-        results_hf = semantic_search_langchain(query, vector_store_hf, k=3)
-
-        for rank, (doc, score) in enumerate(results_hf, 1):
-            print(f"\n  {rank}. Similarity Score: {score:.3f}")
-            print(f"     Feedback ID: {doc.metadata.get('feedback_ID')}")
-            print(f"     Delay: {doc.metadata.get('arrival_delay_minutes')}min, "
-                  f"Satisfaction: {doc.metadata.get('food_satisfaction_score')}/5, "
-                  f"Miles: {doc.metadata.get('actual_flown_miles')}")
-            print(f"     Description: {doc.page_content[:150]}...")
 
         # Search with OpenAI embeddings if available
     

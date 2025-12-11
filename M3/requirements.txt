@@ -1,0 +1,30 @@
+# Requirements for Airline Insights Assistant - LLM Layer
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+python-dotenv>=1.0.0
+neo4j>=5.0.0
+requests>=2.28.0
+
+# LangChain and Vector Store
+langchain>=0.1.0
+langchain-community>=0.0.10
+langchain-huggingface>=0.0.1
+faiss-cpu>=1.7.4
+
+# Embeddings
+sentence-transformers>=2.2.0
+
+# LLM Providers
+google-generativeai>=0.3.0
+huggingface-hub>=0.20.0
+
+# Note: protobuf version conflicts may occur due to multiple TensorFlow installations
+# If you encounter protobuf errors, set: export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+
+# Optional: For local model inference (if using transformers directly)
+# transformers>=4.30.0
+# torch>=2.0.0
+
+# Optional: For Ollama (local models)
+# ollama>=0.1.0
