@@ -55,14 +55,16 @@ st.markdown("""
     }
 
     .chat-message-user {
-        background-color: #F0F2F6;
+        background-color: #2D3748;
+        color: #E2E8F0;
         padding: 1rem;
         border-radius: 0.5rem;
         margin: 0.5rem 0;
     }
 
     .chat-message-assistant {
-        background-color: #E8F4F8;
+        background-color: #1A365D;
+        color: #E2E8F0;
         padding: 1rem;
         border-radius: 0.5rem;
         margin: 0.5rem 0;
@@ -214,22 +216,22 @@ def display_chat_message(msg: Dict[str, Any]):
             if kg_results:
                 st.markdown("### 📊 Knowledge Graph Context")
 
-                # Baseline results
+                # Baseline results - use tabs instead of nested expanders
                 if kg_results.baseline_results:
                     st.markdown(f"**Structured Results:** {len(kg_results.baseline_results)} records")
-                    with st.expander(f"View {len(kg_results.baseline_results)} structured records"):
-                        for i, result in enumerate(kg_results.baseline_results[:10], 1):
-                            st.json(result)
+                    for i, result in enumerate(kg_results.baseline_results[:10], 1):
+                        st.json(result)
+                    if len(kg_results.baseline_results) > 10:
+                        st.caption(f"... and {len(kg_results.baseline_results) - 10} more records")
 
                 # Embedding results
                 if kg_results.embedding_results:
                     st.markdown(f"**Semantic Results:** {len(kg_results.embedding_results)} similar journeys")
-                    with st.expander(f"View {len(kg_results.embedding_results)} semantic results"):
-                        for i, result in enumerate(kg_results.embedding_results[:5], 1):
-                            st.markdown(f"**Journey {i}:**")
-                            st.markdown(result.get("content", "")[:300] + "...")
-                            if result.get("metadata"):
-                                st.json(result["metadata"])
+                    for i, result in enumerate(kg_results.embedding_results[:5], 1):
+                        st.markdown(f"**Journey {i}:**")
+                        st.markdown(result.get("content", "")[:300] + "...")
+                        if result.get("metadata"):
+                            st.json(result["metadata"])
 
 
 # ============================================================================
@@ -338,14 +340,33 @@ def main():
         })
 
         try:
-            # Retrieve from KG
-            with st.spinner("Retrieving from Knowledge Graph..."):
-                retrieval_result = st.session_state.assistant.retriever.retrieve(
-                    question=user_question,
-                    intent=None,
-                    entities={}
+            # Use the same pipeline as llm_layer: classify_and_execute
+            with st.spinner("Classifying intent and executing query..."):
+                # Step 1: Classify intent and execute query (like llm_layer does)
+                intent, entities, query_results = st.session_state.assistant.classifier.classify_and_execute(
+                    user_question
                 )
-
+                
+                # Step 2: Build retrieval result with query results
+                retrieval_result = RetrievalResult(
+                    baseline_results=query_results,
+                    query_intent=intent or "general",
+                    entities=entities
+                )
+                
+                # Step 3: Get embedding results if enabled
+                if st.session_state.retrieval_method != "Baseline Only (Cypher Queries)":
+                    if st.session_state.assistant.retriever.retriever:
+                        try:
+                            docs = st.session_state.assistant.retriever.retriever.invoke(user_question)
+                            retrieval_result.embedding_results = [
+                                {"content": doc.page_content, "metadata": doc.metadata}
+                                for doc in docs[:5]
+                            ]
+                        except Exception as e:
+                            st.warning(f"Embedding search skipped: {e}")
+                
+                # Apply retrieval method filter
                 filtered_result = filter_retrieval_results(
                     retrieval_result,
                     st.session_state.retrieval_method
@@ -378,7 +399,9 @@ def main():
                     'response_time': llm_response.response_time,
                     'token_count': llm_response.token_count,
                     'cypher_queries': cypher_queries,
-                    'kg_results': filtered_result
+                    'kg_results': filtered_result,
+                    'intent': intent,
+                    'entities': entities
                 }
             })
 
