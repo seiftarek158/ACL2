@@ -802,172 +802,172 @@ class AirlineInsightsAssistant:
 # Main Execution
 # ============================================================================
 
-def display_welcome():
-    """Display welcome screen."""
-    print("=" * 80)
-    print("🛫 BRITISH AIRWAYS FLIGHT INSIGHTS ASSISTANT 🛫")
-    print("=" * 80)
-    print("\nWelcome! This is an interactive chatbot powered by AI to answer your")
-    print("questions about British Airways flight data, performance, and passenger feedback.")
-    print()
+# def display_welcome():
+#     """Display welcome screen."""
+#     print("=" * 80)
+#     print("🛫 BRITISH AIRWAYS FLIGHT INSIGHTS ASSISTANT 🛫")
+#     print("=" * 80)
+#     print("\nWelcome! This is an interactive chatbot powered by AI to answer your")
+#     print("questions about British Airways flight data, performance, and passenger feedback.")
+#     print()
 
 
-def select_model() -> List[LLMProvider]:
-    """Let user select which LLM model(s) to use."""
-    print("\n" + "=" * 80)
-    print("SELECT LLM MODEL")
-    print("=" * 80)
+# def select_model() -> List[LLMProvider]:
+#     """Let user select which LLM model(s) to use."""
+#     print("\n" + "=" * 80)
+#     print("SELECT LLM MODEL")
+#     print("=" * 80)
     
-    models = {
-        "1": ("Gemini 2.5 Flash", "gemini"),
-        "2": ("HuggingFace Gemma 2B", "huggingface-gemma"),
-        "3": ("HuggingFace Qwen 7B", "huggingface-qwen")
-    }
+#     models = {
+#         "1": ("Gemini 2.5 Flash", "gemini"),
+#         "2": ("HuggingFace Gemma 2B", "huggingface-gemma"),
+#         "3": ("HuggingFace Qwen 7B", "huggingface-qwen")
+#     }
     
-    print("\nAvailable Models:")
-    for key, (description, _) in models.items():
-        print(f"  {key}. {description}")
-    print("  0. Exit")
+#     print("\nAvailable Models:")
+#     for key, (description, _) in models.items():
+#         print(f"  {key}. {description}")
+#     print("  0. Exit")
     
-    choice = input("\nSelect model (0-3): ").strip()
+#     choice = input("\nSelect model (0-3): ").strip()
     
-    if choice == "0":
-        print("Goodbye!")
-        return None
+#     if choice == "0":
+#         print("Goodbye!")
+#         return None
     
-    if choice not in models:
-        print("Invalid choice. Using Gemini 2.5 Flash by default.")
-        return [GeminiProvider()]
+#     if choice not in models:
+#         print("Invalid choice. Using Gemini 2.5 Flash by default.")
+#         return [GeminiProvider()]
     
-    _, model_type = models[choice]
+#     _, model_type = models[choice]
     
-    try:
-        if model_type == "gemini":
-            return [GeminiProvider(model="gemini-2.5-flash")]
-        elif model_type == "huggingface-gemma":
-            return [HuggingFaceProvider(model="gemma")]
-        elif model_type == "huggingface-qwen":
-            return [HuggingFaceProvider(model="qwen")]
-    except Exception as e:
-        print(f"Error initializing model: {e}")
-        print("Falling back to Gemini 2.5 Flash...")
-        return [GeminiProvider()]
+#     try:
+#         if model_type == "gemini":
+#             return [GeminiProvider(model="gemini-2.5-flash")]
+#         elif model_type == "huggingface-gemma":
+#             return [HuggingFaceProvider(model="gemma")]
+#         elif model_type == "huggingface-qwen":
+#             return [HuggingFaceProvider(model="qwen")]
+#     except Exception as e:
+#         print(f"Error initializing model: {e}")
+#         print("Falling back to Gemini 2.5 Flash...")
+#         return [GeminiProvider()]
 
 
-def format_response(response: LLMResponse, show_metadata: bool = False):
-    """Format and display the LLM response nicely."""
-    print("\n" + "=" * 80)
-    print(f"RESPONSE FROM {response.model_name.upper()}")
-    print("=" * 80)
-    print(f"\n{response.response_text}")
+# def format_response(response: LLMResponse, show_metadata: bool = False):
+#     """Format and display the LLM response nicely."""
+#     print("\n" + "=" * 80)
+#     print(f"RESPONSE FROM {response.model_name.upper()}")
+#     print("=" * 80)
+#     print(f"\n{response.response_text}")
     
-    if show_metadata:
-        print(f"\n{'-' * 80}")
-        print("METADATA:")
-        print(f"  Response Time:  {response.response_time:.2f}s")
-        print(f"  Token Count:    {response.token_count}")
-        print(f"{'-' * 80}")
+#     if show_metadata:
+#         print(f"\n{'-' * 80}")
+#         print("METADATA:")
+#         print(f"  Response Time:  {response.response_time:.2f}s")
+#         print(f"  Token Count:    {response.token_count}")
+#         print(f"{'-' * 80}")
 
 
-def compare_responses(responses: List[LLMResponse]):
-    """Display and compare responses from multiple models."""
-    print("\n" + "=" * 80)
-    print("COMPARISON SUMMARY")
-    print("=" * 80)
+# def compare_responses(responses: List[LLMResponse]):
+#     """Display and compare responses from multiple models."""
+#     print("\n" + "=" * 80)
+#     print("COMPARISON SUMMARY")
+#     print("=" * 80)
     
-    for i, response in enumerate(responses, 1):
-        print(f"\n[Model {i}: {response.model_name}]")
-        print(f"  Response Time: {response.response_time:.2f}s")
-        print(f"  Token Count:   {response.token_count}")
-        print(f"\n  Answer: {response.response_text[:300]}...")
+#     for i, response in enumerate(responses, 1):
+#         print(f"\n[Model {i}: {response.model_name}]")
+#         print(f"  Response Time: {response.response_time:.2f}s")
+#         print(f"  Token Count:   {response.token_count}")
+#         print(f"\n  Answer: {response.response_text[:300]}...")
         
-        if response.response_time > 0:
-            print(f"  Efficiency:    {response.token_count / response.response_time:.0f} tokens/sec")
+#         if response.response_time > 0:
+#             print(f"  Efficiency:    {response.token_count / response.response_time:.0f} tokens/sec")
     
-    print("\n" + "=" * 80)
+#     print("\n" + "=" * 80)
 
 
-def run_chatbot():
-    """Main chatbot loop."""
-    display_welcome()
+# def run_chatbot():
+#     """Main chatbot loop."""
+#     display_welcome()
     
-    # Select model
-    providers = select_model()
-    if not providers:
-        return
+#     # Select model
+#     providers = select_model()
+#     if not providers:
+#         return
     
-    # Initialize assistant
-    try:
-        assistant = AirlineInsightsAssistant(providers=providers)
-        print(f"\n✓ Initialized with {len(providers)} model(s)")
-        print(f"  Models: {', '.join([p.model_name for p in providers])}")
-    except Exception as e:
-        print(f"\n✗ Error initializing assistant: {e}")
-        print("\nMake sure:")
-        print("1. GEMINI_API_KEY is set in .env file")
-        print("2. Neo4j is running with data loaded")
-        print("3. Required packages are installed: pip install -r requirements.txt")
-        return
+#     # Initialize assistant
+#     try:
+#         assistant = AirlineInsightsAssistant(providers=providers)
+#         print(f"\n✓ Initialized with {len(providers)} model(s)")
+#         print(f"  Models: {', '.join([p.model_name for p in providers])}")
+#     except Exception as e:
+#         print(f"\n✗ Error initializing assistant: {e}")
+#         print("\nMake sure:")
+#         print("1. GEMINI_API_KEY is set in .env file")
+#         print("2. Neo4j is running with data loaded")
+#         print("3. Required packages are installed: pip install -r requirements.txt")
+#         return
     
-    # Chat loop
-    conversation_count = 0
-    while True:
-        try:
-            # Get user question
-            question = input("\n" + "-" * 80 + "\nEnter your question (or 'q' to exit): ").strip()
-            if question.lower() == "q":
-                break
+#     # Chat loop
+#     conversation_count = 0
+#     while True:
+#         try:
+#             # Get user question
+#             question = input("\n" + "-" * 80 + "\nEnter your question (or 'q' to exit): ").strip()
+#             if question.lower() == "q":
+#                 break
             
-            if not question:
-                print("Please enter a question.")
-                continue
+#             if not question:
+#                 print("Please enter a question.")
+#                 continue
             
-            conversation_count += 1
-            print(f"\n⏳ Processing question {conversation_count}...\n")
+#             conversation_count += 1
+#             print(f"\n⏳ Processing question {conversation_count}...\n")
             
-            # Get responses
-            if len(providers) > 1:
-                # Compare models
-                responses = assistant.compare_models(question)
-                compare_responses(responses)
-            else:
-                # Single model
-                response = assistant.answer_question(question)
-                format_response(response, show_metadata=True)
+#             # Get responses
+#             if len(providers) > 1:
+#                 # Compare models
+#                 responses = assistant.compare_models(question)
+#                 compare_responses(responses)
+#             else:
+#                 # Single model
+#                 response = assistant.answer_question(question)
+#                 format_response(response, show_metadata=True)
             
-            # Ask if user wants to continue
-            print("\n" + "-" * 80)
-            continue_chat = input("Continue chatting? (y/n): ").strip().lower()
-            if continue_chat != "y":
-                break
+#             # Ask if user wants to continue
+#             print("\n" + "-" * 80)
+#             continue_chat = input("Continue chatting? (y/n): ").strip().lower()
+#             if continue_chat != "y":
+#                 break
         
-        except KeyboardInterrupt:
-            print("\n\nChat interrupted by user.")
-            break
-        except Exception as e:
-            print(f"\n✗ Error processing question: {e}")
-            import traceback
-            traceback.print_exc()
-            retry = input("Try again? (y/n): ").strip().lower()
-            if retry != "y":
-                break
+#         except KeyboardInterrupt:
+#             print("\n\nChat interrupted by user.")
+#             break
+#         except Exception as e:
+#             print(f"\n✗ Error processing question: {e}")
+#             import traceback
+#             traceback.print_exc()
+#             retry = input("Try again? (y/n): ").strip().lower()
+#             if retry != "y":
+#                 break
     
-    # Cleanup
-    assistant.close()
-    print("\n" + "=" * 80)
-    print(f"Chat ended. Total questions asked: {conversation_count}")
-    print("Thank you for using British Airways Flight Insights Assistant!")
-    print("=" * 80 + "\n")
+#     # Cleanup
+#     assistant.close()
+#     print("\n" + "=" * 80)
+#     print(f"Chat ended. Total questions asked: {conversation_count}")
+#     print("Thank you for using British Airways Flight Insights Assistant!")
+#     print("=" * 80 + "\n")
 
 
-if __name__ == "__main__":
-    try:
-        run_chatbot()
-    except Exception as e:
-        print(f"Fatal Error: {e}")
-        import traceback
-        traceback.print_exc()
-        print("\nMake sure:")
-        print("1. GEMINI_API_KEY is set in .env file")
-        print("2. Neo4j is running with data loaded")
-        print("3. Required packages are installed: pip install -r M3/requirements.txt")
+# if __name__ == "__main__":
+#     try:
+#         run_chatbot()
+#     except Exception as e:
+#         print(f"Fatal Error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         print("\nMake sure:")
+#         print("1. GEMINI_API_KEY is set in .env file")
+#         print("2. Neo4j is running with data loaded")
+#         print("3. Required packages are installed: pip install -r M3/requirements.txt")

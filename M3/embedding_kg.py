@@ -25,10 +25,14 @@ from typing import List, Dict, Any, Tuple
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
+# Use community version to avoid PyTorch DLL issues
 try:
-    from langchain_huggingface import HuggingFaceEmbeddings
-except ImportError:
     from langchain_community.embeddings import HuggingFaceEmbeddings
+except ImportError:
+    try:
+        from langchain_huggingface import HuggingFaceEmbeddings
+    except ImportError:
+        raise ImportError("Neither langchain_community nor langchain_huggingface is available")
 
 config_path = os.path.join(os.path.dirname(__file__), "..", "Airline", "config.txt")
 uri = None
