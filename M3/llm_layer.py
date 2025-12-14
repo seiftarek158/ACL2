@@ -345,11 +345,14 @@ Please provide a clear, concise answer:"""
         Returns:
             Tuple of (context_section, prompt_section)
         """
-        context_section = f"""=== PERSONA ===
-{self.persona}
+        context_section = f"""
+                            === PERSONA ===
+                            {self.persona}
 
-=== CONTEXT ===
-{context}"""
+                            === CONTEXT ===
+                            {context}
+
+                            """
         
         prompt_section = self.TASK_TEMPLATE.format(question=question)
         
@@ -646,55 +649,70 @@ class AirlineInsightsAssistant:
             # Default to Gemini
             self.providers = [GeminiProvider()]
     
-    def answer_question(self, question: str, provider_index: int = 0) -> LLMResponse:
+    def answer_question(self, question: str, provider_index: int = 0, retrieval_mode: str = "hybrid") -> LLMResponse:
         """
         Answer a question using the specified LLM provider.
         
         Args:
             question: The user's question
             provider_index: Index of the provider to use (default: 0)
+            retrieval_mode: Retrieval mode - "hybrid", "baseline_only", or "embeddings_only"
         
         Returns:
             LLMResponse with the answer
         """
-        # 1. Classify intent, execute query, and get results (like interactive_mode)
-        intent, entities, query_results = self.classifier.classify_and_execute(question)
+        # Validate retrieval mode
+        if retrieval_mode not in ["hybrid", "baseline_only", "embeddings_only"]:
+            raise ValueError(f"Invalid retrieval_mode: {retrieval_mode}. Must be 'hybrid', 'baseline_only', or 'embeddings_only'")
+        
+        # 1. Get baseline results if needed
+        intent, entities, query_results = None, {}, []
+        if retrieval_mode in ["hybrid", "baseline_only"]:
+            intent, entities, query_results = self.classifier.classify_and_execute(question)
         
         # Log query results
         print("\n" + "=" * 70)
-        print("📊 QUERY RESULTS (Before passing to LLM)")
+        print(f"📊 QUERY RESULTS (Mode: {retrieval_mode.upper()})")
         print("=" * 70)
-        print(f"Intent: {intent}")
-        print(f"Entities: {entities}")
-        print(f"Results count: {len(query_results)}")
-        if query_results:
-            print("-" * 70)
-            for i, result in enumerate(query_results[:10], 1):
-                print(f"  {i}. {result}")
-            if len(query_results) > 10:
-                print(f"  ... and {len(query_results) - 10} more results")
+        if retrieval_mode in ["hybrid", "baseline_only"]:
+            print(f"Intent: {intent}")
+            print(f"Entities: {entities}")
+            print(f"Results count: {len(query_results)}")
+            if query_results:
+                print("-" * 70)
+                for i, result in enumerate(query_results[:10], 1):
+                    print(f"  {i}. {result}")
+                if len(query_results) > 10:
+                    print(f"  ... and {len(query_results) - 10} more results")
+            else:
+                print("  (No results from query)")
         else:
-            print("  (No results from query)")
+            print("  (Baseline queries skipped - embeddings only mode)")
         print("=" * 70)
         
-        # 2. Build retrieval result with query results as baseline
+        # 2. Build retrieval result
         retrieval_result = RetrievalResult(
-            baseline_results=query_results,
+            baseline_results=query_results if retrieval_mode in ["hybrid", "baseline_only"] else [],
             query_intent=intent or "general",
             entities=entities
         )
         
-        # 3. Also get embedding results for additional context
-        if self.retriever.retriever:
-            try:
-                docs = self.retriever.retriever.invoke(question)
-                retrieval_result.embedding_results = [
-                    {"content": doc.page_content, "metadata": doc.metadata}
-                    for doc in docs[:5]
-                ]
-                print(f"\n📚 Embedding results: {len(retrieval_result.embedding_results)} similar journeys found")
-            except Exception as e:
-                print(f"   → Embedding search skipped: {e}")
+        # 3. Get embedding results if needed
+        if retrieval_mode in ["hybrid", "embeddings_only"]:
+            if self.retriever.retriever:
+                try:
+                    docs = self.retriever.retriever.invoke(question)
+                    retrieval_result.embedding_results = [
+                        {"content": doc.page_content, "metadata": doc.metadata}
+                        for doc in docs[:5]
+                    ]
+                    print(f"\n📚 Embedding results: {len(retrieval_result.embedding_results)} similar journeys found")
+                except Exception as e:
+                    print(f"   → Embedding search skipped: {e}")
+            else:
+                print(f"\n📚 Embedding search skipped: Retriever not initialized")
+        else:
+            print(f"\n📚 Embedding search skipped: {retrieval_mode} mode")
         
         # 4. Build structured prompt with the query results
         context = self.prompt_builder.build_context(retrieval_result)
@@ -714,37 +732,45 @@ class AirlineInsightsAssistant:
         
         return response
     
-    def compare_models(self, question: str) -> List[LLMResponse]:
+    def compare_models(self, question: str, retrieval_mode: str = "hybrid") -> List[LLMResponse]:
         """
         Compare responses from all configured LLM providers.
         
         Args:
             question: The user's question
+            retrieval_mode: Retrieval mode - "hybrid", "baseline_only", or "embeddings_only"
         
         Returns:
             List of LLMResponse objects from each provider
         """
+        # Validate retrieval mode
+        if retrieval_mode not in ["hybrid", "baseline_only", "embeddings_only"]:
+            raise ValueError(f"Invalid retrieval_mode: {retrieval_mode}. Must be 'hybrid', 'baseline_only', or 'embeddings_only'")
+        
         responses = []
         
-        # Get shared context for fair comparison (classify and execute once)
-        intent, entities, query_results = self.classifier.classify_and_execute(question)
+        # Get baseline results if needed
+        intent, entities, query_results = None, {}, []
+        if retrieval_mode in ["hybrid", "baseline_only"]:
+            intent, entities, query_results = self.classifier.classify_and_execute(question)
         
         retrieval_result = RetrievalResult(
-            baseline_results=query_results,
+            baseline_results=query_results if retrieval_mode in ["hybrid", "baseline_only"] else [],
             query_intent=intent or "general",
             entities=entities
         )
         
-        # Add embedding results
-        if self.retriever.retriever:
-            try:
-                docs = self.retriever.retriever.invoke(question)
-                retrieval_result.embedding_results = [
-                    {"content": doc.page_content, "metadata": doc.metadata}
-                    for doc in docs[:5]
-                ]
-            except:
-                pass
+        # Add embedding results if needed
+        if retrieval_mode in ["hybrid", "embeddings_only"]:
+            if self.retriever.retriever:
+                try:
+                    docs = self.retriever.retriever.invoke(question)
+                    retrieval_result.embedding_results = [
+                        {"content": doc.page_content, "metadata": doc.metadata}
+                        for doc in docs[:5]
+                    ]
+                except:
+                    pass
         
         context = self.prompt_builder.build_context(retrieval_result)
         context_section, prompt_section = self.prompt_builder.build_prompt(question, context)

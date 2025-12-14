@@ -135,24 +135,14 @@ def get_provider(model_name: str):
     return st.session_state.available_providers.get(model_name)
 
 
-def filter_retrieval_results(retrieval_result: RetrievalResult, method: str) -> RetrievalResult:
-    """Filter retrieval results based on selected method."""
-    filtered_result = RetrievalResult(
-        query_intent=retrieval_result.query_intent,
-        entities=retrieval_result.entities
-    )
-
-    if method == "Baseline Only (Cypher Queries)":
-        filtered_result.baseline_results = retrieval_result.baseline_results
-        filtered_result.embedding_results = []
-    elif method == "Embeddings Only (Semantic Search)":
-        filtered_result.baseline_results = []
-        filtered_result.embedding_results = retrieval_result.embedding_results
-    else:  # Both
-        filtered_result.baseline_results = retrieval_result.baseline_results
-        filtered_result.embedding_results = retrieval_result.embedding_results
-
-    return filtered_result
+def map_retrieval_mode(ui_mode: str) -> str:
+    """Map UI dropdown values to internal retrieval mode strings."""
+    mapping = {
+        "Both (Hybrid)": "hybrid",
+        "Baseline Only (Cypher Queries)": "baseline_only",
+        "Embeddings Only (Semantic Search)": "embeddings_only"
+    }
+    return mapping.get(ui_mode, "hybrid")
 
 
 def extract_cypher_queries(filtered_result: RetrievalResult, assistant) -> list:
@@ -340,22 +330,44 @@ def main():
         })
 
         try:
-            # Use the same pipeline as llm_layer: classify_and_execute
-            with st.spinner("Classifying intent and executing query..."):
-                # Step 1: Classify intent and execute query (like llm_layer does)
-                intent, entities, query_results = st.session_state.assistant.classifier.classify_and_execute(
-                    user_question
-                )
+            # Map UI mode to internal mode
+            internal_mode = map_retrieval_mode(st.session_state.retrieval_method)
+            
+            # Generate response using the LLM layer with specified retrieval mode
+            with st.spinner(f"Processing with {st.session_state.selected_model} ({st.session_state.retrieval_method})..."):
+                provider = get_provider(st.session_state.selected_model)
+                if not provider:
+                    st.error("Failed to initialize model")
+                    return
                 
-                # Step 2: Build retrieval result with query results
+                # Temporarily set the assistant's providers to only the selected one
+                original_providers = st.session_state.assistant.providers
+                st.session_state.assistant.providers = [provider]
+                
+                try:
+                    # Use the assistant's answer_question method with retrieval mode
+                    llm_response = st.session_state.assistant.answer_question(
+                        user_question, 
+                        provider_index=0,
+                        retrieval_mode=internal_mode
+                    )
+                finally:
+                    # Restore original providers
+                    st.session_state.assistant.providers = original_providers
+                
+                # For metadata, we need to reconstruct what was retrieved
+                # Get the retrieval result by calling the internal logic
+                intent, entities, query_results = None, {}, []
+                if internal_mode in ["hybrid", "baseline_only"]:
+                    intent, entities, query_results = st.session_state.assistant.classifier.classify_and_execute(user_question)
+                
                 retrieval_result = RetrievalResult(
-                    baseline_results=query_results,
+                    baseline_results=query_results if internal_mode in ["hybrid", "baseline_only"] else [],
                     query_intent=intent or "general",
                     entities=entities
                 )
                 
-                # Step 3: Get embedding results if enabled
-                if st.session_state.retrieval_method != "Baseline Only (Cypher Queries)":
+                if internal_mode in ["hybrid", "embeddings_only"]:
                     if st.session_state.assistant.retriever.retriever:
                         try:
                             docs = st.session_state.assistant.retriever.retriever.invoke(user_question)
@@ -363,31 +375,11 @@ def main():
                                 {"content": doc.page_content, "metadata": doc.metadata}
                                 for doc in docs[:5]
                             ]
-                        except Exception as e:
-                            st.warning(f"Embedding search skipped: {e}")
-                
-                # Apply retrieval method filter
-                filtered_result = filter_retrieval_results(
-                    retrieval_result,
-                    st.session_state.retrieval_method
-                )
-
-            # Generate response
-            with st.spinner(f"Generating with {st.session_state.selected_model}..."):
-                context = st.session_state.assistant.prompt_builder.build_context(filtered_result)
-                context_section, prompt_section = st.session_state.assistant.prompt_builder.build_prompt(
-                    user_question, context
-                )
-
-                provider = get_provider(st.session_state.selected_model)
-                if not provider:
-                    st.error("Failed to initialize model")
-                    return
-
-                llm_response = provider.generate(prompt_section, context_section)
+                        except:
+                            pass
 
             # Extract Cypher queries
-            cypher_queries = extract_cypher_queries(filtered_result, st.session_state.assistant)
+            cypher_queries = extract_cypher_queries(retrieval_result, st.session_state.assistant)
 
             # Add assistant message
             st.session_state.chat_history.append({
@@ -399,7 +391,7 @@ def main():
                     'response_time': llm_response.response_time,
                     'token_count': llm_response.token_count,
                     'cypher_queries': cypher_queries,
-                    'kg_results': filtered_result,
+                    'kg_results': retrieval_result,
                     'intent': intent,
                     'entities': entities
                 }
