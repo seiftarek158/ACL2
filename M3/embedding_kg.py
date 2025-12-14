@@ -215,7 +215,7 @@ def create_langchain_documents(journeys: List[Dict[str, Any]], descriptions: Lis
 # ============================================================================
 
 def create_vector_store_huggingface(documents: List[Document],
-                                    model_name: str = "sentence-transformers/all-mpnet-base-v2") -> FAISS:
+                                    model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> FAISS:
     """
     Model 1: Create FAISS vector store using HuggingFace embeddings (free, local).
     other embedding models that can be used include:

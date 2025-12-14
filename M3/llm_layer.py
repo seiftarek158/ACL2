@@ -532,7 +532,7 @@ class IntentClassifier:
             print(f"Warning: Could not initialize Neo4j driver: {e}")
             self.driver = None
     
-    def classify_and_execute(self, user_query: str) -> Tuple[Optional[str], Dict[str, Any], List[Dict[str, Any]]]:
+    def classify_and_execute(self, user_query: str) -> Tuple[Optional[str], Dict[str, Any], List[Dict[str, Any]], List[str]]:
         """
         Classify intent, execute the query, and return results.
         Follows the same flow as interactive_mode in query_classifier.py.
@@ -541,16 +541,17 @@ class IntentClassifier:
             user_query: The user's natural language question
         
         Returns:
-            Tuple of (intent, entities, query_results)
+            Tuple of (intent, entities, query_results, thinking_steps)
         """
-        print(f"\n🔍 Classifying query: {user_query[:50]}...")
+        thinking_steps = []
+        thinking_steps.append(f"🔍 Classifying query: {user_query[:50]}...")
         
         if not self.client:
-            print("   → No LLM client available")
-            return None, {}, []
+            thinking_steps.append("   → No LLM client available")
+            return None, {}, [], thinking_steps
         
         # Step 1: Try template matching (keyword + LLM classification)
-        print("   → Checking for template match...")
+        thinking_steps.append("   → Checking for template match...")
         template_result = try_template_query(user_query, self.client)
         
         cypher_query = None
@@ -567,30 +568,30 @@ class IntentClassifier:
             else:
                 llm_intent, entities = classify_intent_and_extract_entities(user_query, self.client)
                 intent = llm_intent
-            print(f"   ✓ Template matched: {intent}")
+            thinking_steps.append(f"   ✓ Template matched: {intent}")
         else:
             # Step 2: No template match - generate custom Cypher
-            print("   → No template match - generating custom Cypher...")
+            thinking_steps.append("   → No template match - generating custom Cypher...")
             cypher_query = generate_cypher_from_nl(user_query, self.client)
             intent = "custom"
             
             if cypher_query is None:
-                print("   ✗ Failed to generate Cypher query")
-                return None, {}, []
+                thinking_steps.append("   ✗ Failed to generate Cypher query")
+                return None, {}, [], thinking_steps
         
         # Step 3: Execute the query
         if not self.driver:
-            print("   → No Neo4j driver available for query execution")
-            return intent, entities, []
+            thinking_steps.append("   → No Neo4j driver available for query execution")
+            return intent, entities, [], thinking_steps
         
         try:
-            print("   → Executing query...")
+            thinking_steps.append("   → Executing query...")
             results = execute_cypher_query(self.driver, cypher_query, params)
-            print(f"   ✓ Query returned {len(results)} results")
-            return intent, entities, results
+            thinking_steps.append(f"   ✓ Query returned {len(results)} results")
+            return intent, entities, results, thinking_steps
         except Exception as e:
-            print(f"   ✗ Query execution error: {e}")
-            return intent, entities, []
+            thinking_steps.append(f"   ✗ Query execution error: {e}")
+            return intent, entities, [], thinking_steps
     
     def classify(self, user_query: str) -> Tuple[Optional[str], Dict[str, Any]]:
         """
@@ -661,34 +662,38 @@ class AirlineInsightsAssistant:
         Returns:
             LLMResponse with the answer
         """
+        thinking_steps = []
+        
         # Validate retrieval mode
         if retrieval_mode not in ["hybrid", "baseline_only", "embeddings_only"]:
             raise ValueError(f"Invalid retrieval_mode: {retrieval_mode}. Must be 'hybrid', 'baseline_only', or 'embeddings_only'")
         
         # 1. Get baseline results if needed
-        intent, entities, query_results = None, {}, []
+        intent, entities, query_results, classifier_thinking = None, {}, [], []
         if retrieval_mode in ["hybrid", "baseline_only"]:
-            intent, entities, query_results = self.classifier.classify_and_execute(question)
+            intent, entities, query_results, classifier_thinking = self.classifier.classify_and_execute(question)
+            # Add classifier thinking steps at the beginning
+            thinking_steps.extend(classifier_thinking)
         
         # Log query results
-        print("\n" + "=" * 70)
-        print(f"📊 QUERY RESULTS (Mode: {retrieval_mode.upper()})")
-        print("=" * 70)
+        thinking_steps.append("=" * 70)
+        thinking_steps.append(f"📊 QUERY RESULTS (Mode: {retrieval_mode.upper()})")
+        thinking_steps.append("=" * 70)
         if retrieval_mode in ["hybrid", "baseline_only"]:
-            print(f"Intent: {intent}")
-            print(f"Entities: {entities}")
-            print(f"Results count: {len(query_results)}")
+            thinking_steps.append(f"Intent: {intent}")
+            thinking_steps.append(f"Entities: {entities}")
+            thinking_steps.append(f"Results count: {len(query_results)}")
             if query_results:
-                print("-" * 70)
+                thinking_steps.append("-" * 70)
                 for i, result in enumerate(query_results[:10], 1):
-                    print(f"  {i}. {result}")
+                    thinking_steps.append(f"  {i}. {result}")
                 if len(query_results) > 10:
-                    print(f"  ... and {len(query_results) - 10} more results")
+                    thinking_steps.append(f"  ... and {len(query_results) - 10} more results")
             else:
-                print("  (No results from query)")
+                thinking_steps.append("  (No results from query)")
         else:
-            print("  (Baseline queries skipped - embeddings only mode)")
-        print("=" * 70)
+            thinking_steps.append("  (Baseline queries skipped - embeddings only mode)")
+        thinking_steps.append("=" * 70)
         
         # 2. Build retrieval result
         retrieval_result = RetrievalResult(
@@ -706,29 +711,32 @@ class AirlineInsightsAssistant:
                         {"content": doc.page_content, "metadata": doc.metadata}
                         for doc in docs[:5]
                     ]
-                    print(f"\n📚 Embedding results: {len(retrieval_result.embedding_results)} similar journeys found")
+                    thinking_steps.append(f"\n📚 Embedding results: {len(retrieval_result.embedding_results)} similar journeys found")
                 except Exception as e:
-                    print(f"   → Embedding search skipped: {e}")
+                    thinking_steps.append(f"   → Embedding search skipped: {e}")
             else:
-                print(f"\n📚 Embedding search skipped: Retriever not initialized")
+                thinking_steps.append(f"\n📚 Embedding search skipped: Retriever not initialized")
         else:
-            print(f"\n📚 Embedding search skipped: {retrieval_mode} mode")
+            thinking_steps.append(f"\n📚 Embedding search skipped: {retrieval_mode} mode")
         
         # 4. Build structured prompt with the query results
         context = self.prompt_builder.build_context(retrieval_result)
         context_section, prompt_section = self.prompt_builder.build_prompt(question, context)
         
         # Log context being passed to LLM
-        print("\n" + "-" * 70)
-        print("📝 CONTEXT BEING PASSED TO LLM:")
-        print("-" * 70)
-        print(context[:1000] + "..." if len(context) > 1000 else context)
-        print("-" * 70)
+        thinking_steps.append("\n" + "-" * 70)
+        thinking_steps.append("📝 CONTEXT BEING PASSED TO LLM:")
+        thinking_steps.append("-" * 70)
+        thinking_steps.append(context[:1000] + "..." if len(context) > 1000 else context)
+        thinking_steps.append("-" * 70)
         
         # 5. Generate response from LLM
-        print(f"\n🤖 Generating response with {self.providers[provider_index].model_name}...")
+        thinking_steps.append(f"\n🤖 Generating response with {self.providers[provider_index].model_name}...")
         provider = self.providers[provider_index]
         response = provider.generate(prompt_section, context_section)
+        
+        # Add thinking steps to response metadata
+        response.metadata['thinking_steps'] = thinking_steps
         
         return response
     
@@ -750,9 +758,9 @@ class AirlineInsightsAssistant:
         responses = []
         
         # Get baseline results if needed
-        intent, entities, query_results = None, {}, []
+        intent, entities, query_results, _ = None, {}, [], []
         if retrieval_mode in ["hybrid", "baseline_only"]:
-            intent, entities, query_results = self.classifier.classify_and_execute(question)
+            intent, entities, query_results, _ = self.classifier.classify_and_execute(question)
         
         retrieval_result = RetrievalResult(
             baseline_results=query_results if retrieval_mode in ["hybrid", "baseline_only"] else [],

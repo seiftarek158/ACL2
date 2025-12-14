@@ -12,6 +12,7 @@ import streamlit as st
 import os
 import json
 import warnings
+import time
 from typing import Dict, Any
 
 # Fix protobuf compatibility issue
@@ -201,6 +202,17 @@ def display_chat_message(msg: Dict[str, Any]):
                 for i, query in enumerate(metadata['cypher_queries'], 1):
                     st.code(query, language="cypher")
 
+            # Thinking Steps
+            thinking_steps = metadata.get('thinking_steps')
+            if thinking_steps:
+                st.markdown("### 🧠 Thinking Process")
+                thinking_text = "\n".join(thinking_steps)
+                st.markdown(f"""
+                <div style="color: #6B7280; font-style: italic; opacity: 0.8; font-family: monospace; white-space: pre-wrap; background-color: #F9FAFB; padding: 10px; border-radius: 5px;">
+                {thinking_text}
+                </div>
+                """, unsafe_allow_html=True)
+
             # KG Context
             kg_results = metadata.get('kg_results')
             if kg_results:
@@ -222,6 +234,34 @@ def display_chat_message(msg: Dict[str, Any]):
                         st.markdown(result.get("content", "")[:300] + "...")
                         if result.get("metadata"):
                             st.json(result["metadata"])
+
+
+def display_thinking_steps(thinking_steps: list):
+    """Display thinking steps with animated styling."""
+    # Colors for shifting effect
+    colors = ["#6B7280", "#4B5563", "#374151", "#1F2937"]
+    
+    placeholder = st.empty()
+    current_text = ""
+    
+    for i, step in enumerate(thinking_steps):
+        current_text += step + "\n"
+        color = colors[i % len(colors)]
+        
+        placeholder.markdown(f"""
+        <div style="color: {color}; font-style: italic; opacity: 0.7; font-family: monospace; white-space: pre-wrap;">
+        {current_text}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        time.sleep(0.3)  # Delay for animation effect
+    
+    # Final display with consistent styling
+    placeholder.markdown(f"""
+    <div style="color: #6B7280; font-style: italic; opacity: 0.6; font-family: monospace; white-space: pre-wrap; border-left: 2px solid #3B82F6; padding-left: 10px;">
+    {current_text}
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -357,9 +397,9 @@ def main():
                 
                 # For metadata, we need to reconstruct what was retrieved
                 # Get the retrieval result by calling the internal logic
-                intent, entities, query_results = None, {}, []
+                intent, entities, query_results, _ = None, {}, [], []
                 if internal_mode in ["hybrid", "baseline_only"]:
-                    intent, entities, query_results = st.session_state.assistant.classifier.classify_and_execute(user_question)
+                    intent, entities, query_results, _ = st.session_state.assistant.classifier.classify_and_execute(user_question)
                 
                 retrieval_result = RetrievalResult(
                     baseline_results=query_results if internal_mode in ["hybrid", "baseline_only"] else [],
@@ -381,6 +421,11 @@ def main():
             # Extract Cypher queries
             cypher_queries = extract_cypher_queries(retrieval_result, st.session_state.assistant)
 
+            # Display thinking steps
+            thinking_steps = llm_response.metadata.get('thinking_steps', [])
+            if thinking_steps:
+                display_thinking_steps(thinking_steps)
+
             # Add assistant message
             st.session_state.chat_history.append({
                 'role': 'assistant',
@@ -393,7 +438,8 @@ def main():
                     'cypher_queries': cypher_queries,
                     'kg_results': retrieval_result,
                     'intent': intent,
-                    'entities': entities
+                    'entities': entities,
+                    'thinking_steps': thinking_steps
                 }
             })
 
