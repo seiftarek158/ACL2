@@ -219,8 +219,9 @@ def create_vector_store_huggingface(documents: List[Document],
     """
     Model 1: Create FAISS vector store using HuggingFace embeddings (free, local).
     other embedding models that can be used include:
-    - "sentence-transformers/all-mpnet-base-v2" slower but more accurate
-    - "intfloat/e5-base-v2" good balance of speed and accuracy
+    - "sentence-transformers/all-mpnet-base-v2" slower but more accurate (384 dimensions)
+    - "sentence-transformers/all-MiniLM-L6-v2" faster, lighter (384 dimensions)
+    - "intfloat/e5-base-v2" good balance of speed and accuracy (768 dimensions)
     Args:
         documents: List of LangChain Document objects
         model_name: HuggingFace embedding model name
@@ -239,7 +240,7 @@ def create_vector_store_huggingface(documents: List[Document],
     return vector_store
 
 
-def intialize_retriever(vector_store: FAISS, k: int = 5):
+def intialize_retriever(vector_store: FAISS, k: int = 50):
     """
     Initialize a retriever from the FAISS vector store.
 

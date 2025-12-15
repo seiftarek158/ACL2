@@ -370,14 +370,15 @@ class KnowledgeGraphRetriever:
     2. Embeddings: Semantic search via FAISS vector store
     """
     
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: str = None, embedding_model: str = "sentence-transformers/all-mpnet-base-v2"):
         """Initialize the retriever with both query executor and vector store."""
         self.config_path = config_path or os.path.join(os.path.dirname(__file__), "..", "Airline", "config.txt")
-        
+        self.embedding_model = embedding_model
+
         # Initialize query executor for baseline queries
         self.query_executor = QueryExecutor(config_path=self.config_path)
         self.query_library = QueryTemplateLibrary()
-        
+
         # Initialize vector store for semantic search
         self.vector_store = None
         self.retriever = None
@@ -385,28 +386,28 @@ class KnowledgeGraphRetriever:
     
     def _initialize_vector_store(self):
         """Initialize the FAISS vector store with journey data."""
-        print("Initializing vector store...")
+        print(f"Initializing vector store with embedding model: {self.embedding_model}...")
         try:
             # Load Neo4j config
             uri, username, password = self._load_neo4j_config()
             driver = GraphDatabase.driver(uri, auth=(username, password))
-            
+
             # Extract journeys
             with driver.session() as session:
                 journeys = session.execute_read(lambda tx: extract_all_journeys(tx, limit=500))
-            
+
             if journeys:
                 # Generate descriptions and create documents
                 descriptions = [generate_simple_description(j) for j in journeys]
                 documents = create_langchain_documents(journeys, descriptions)
-                
-                # Create vector store
-                self.vector_store = create_vector_store_huggingface(documents)
+
+                # Create vector store with specified embedding model
+                self.vector_store = create_vector_store_huggingface(documents, model_name=self.embedding_model)
                 self.retriever = intialize_retriever(self.vector_store, k=5)
-                print(f"Vector store initialized with {len(documents)} documents")
+                print(f"Vector store initialized with {len(documents)} documents using {self.embedding_model}")
             else:
                 print("Warning: No journeys found for vector store initialization")
-            
+
             driver.close()
         except Exception as e:
             print(f"Warning: Could not initialize vector store: {e}")
@@ -454,7 +455,6 @@ class KnowledgeGraphRetriever:
             except Exception as e:
                 print(f"Baseline query error: {e}")
                 result.baseline_results = []
-        
         # 2. Embedding-based retrieval (semantic search)
         if self.retriever:
             try:
@@ -628,20 +628,22 @@ class AirlineInsightsAssistant:
     5. Evaluation and comparison
     """
     
-    def __init__(self, providers: List[LLMProvider] = None, config_path: str = None):
+    def __init__(self, providers: List[LLMProvider] = None, config_path: str = None, embedding_model: str = "sentence-transformers/all-mpnet-base-v2"):
         """
         Initialize the assistant.
-        
+
         Args:
             providers: List of LLM providers to use (default: Gemini)
             config_path: Path to Neo4j config file
+            embedding_model: HuggingFace embedding model to use for semantic search
         """
         # Initialize components
         self.config_path = config_path
+        self.embedding_model = embedding_model
         self.classifier = IntentClassifier(config_path=config_path)  # Now handles query execution
-        self.retriever = KnowledgeGraphRetriever(config_path=config_path)
+        self.retriever = KnowledgeGraphRetriever(config_path=config_path, embedding_model=embedding_model)
         self.prompt_builder = PromptBuilder()
-        
+
         # Initialize LLM providers
         if providers:
             self.providers = providers

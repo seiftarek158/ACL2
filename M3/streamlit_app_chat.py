@@ -93,17 +93,26 @@ if 'assistant' not in st.session_state:
     st.session_state.available_providers = {}
     st.session_state.selected_model = "Gemini 2.5 Flash"
     st.session_state.retrieval_method = "Both (Hybrid)"
+    st.session_state.embedding_model = "sentence-transformers/all-mpnet-base-v2"
+    st.session_state.needs_reinit = False
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
 
-def initialize_assistant() -> AirlineInsightsAssistant:
-    """Initialize the assistant with default Gemini provider."""
+def initialize_assistant(embedding_model: str = None) -> AirlineInsightsAssistant:
+    """Initialize the assistant with specified embedding model."""
     try:
-        with st.spinner("Initializing Graph-RAG system..."):
+        # Use session state embedding model if not specified
+        if embedding_model is None:
+            embedding_model = st.session_state.embedding_model
+
+        with st.spinner(f"Initializing Graph-RAG system with {embedding_model.split('/')[-1]}..."):
             provider = GeminiProvider(model="gemini-2.5-flash")
-            assistant = AirlineInsightsAssistant(providers=[provider])
+            assistant = AirlineInsightsAssistant(
+                providers=[provider],
+                embedding_model=embedding_model
+            )
 
             # Cache all available providers
             st.session_state.available_providers = {
@@ -187,12 +196,17 @@ def display_chat_message(msg: Dict[str, Any]):
             metadata = msg['metadata']
 
             # Metrics row
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Retrieval Method", metadata.get('retrieval_method', 'N/A'))
             with col2:
-                st.metric("Response Time", f"{metadata.get('response_time', 0):.2f}s")
+                embedding_display = metadata.get('embedding_model', 'N/A')
+                if embedding_display != 'N/A':
+                    embedding_display = embedding_display.split('/')[-1][:15]
+                st.metric("Embedding Model", embedding_display)
             with col3:
+                st.metric("Response Time", f"{metadata.get('response_time', 0):.2f}s")
+            with col4:
                 st.metric("Tokens Used", metadata.get('token_count', 0))
 
             # Cypher Queries
@@ -237,18 +251,47 @@ def main():
     with st.sidebar:
         st.header("⚙️ Settings")
 
+        # Embedding model selection (before initialization)
+        st.markdown("### 🧠 Embedding Model")
+        new_embedding_model = st.selectbox(
+            "Select Embedding Model",
+            options=[
+                "sentence-transformers/all-mpnet-base-v2",
+                "sentence-transformers/all-MiniLM-L6-v2"
+            ],
+            index=0 if st.session_state.embedding_model == "sentence-transformers/all-mpnet-base-v2" else 1,
+            help="all-mpnet-base-v2: More accurate but slower\nall-MiniLM-L6-v2: Faster and lighter",
+            key="sidebar_embedding",
+            label_visibility="collapsed"
+        )
+
+        # Check if embedding model changed
+        if new_embedding_model != st.session_state.embedding_model:
+            st.session_state.embedding_model = new_embedding_model
+            if st.session_state.initialized:
+                st.session_state.needs_reinit = True
+                st.warning("⚠️ Embedding model changed. Please reinitialize the system.")
+
+        st.divider()
+
         # Initialize button
-        if not st.session_state.initialized:
-            if st.button("🚀 Initialize System", type="primary", use_container_width=True):
-                st.session_state.assistant = initialize_assistant()
+        if not st.session_state.initialized or st.session_state.needs_reinit:
+            button_text = "🔄 Reinitialize System" if st.session_state.needs_reinit else "🚀 Initialize System"
+            if st.button(button_text, type="primary", use_container_width=True):
+                st.session_state.assistant = initialize_assistant(st.session_state.embedding_model)
                 st.session_state.initialized = st.session_state.assistant is not None
+                st.session_state.needs_reinit = False
                 if st.session_state.initialized:
                     st.success("✅ System initialized!")
                     st.rerun()
 
         # Status
-        if st.session_state.initialized:
+        if st.session_state.initialized and not st.session_state.needs_reinit:
             st.success("✅ Ready")
+            model_display = st.session_state.embedding_model.split('/')[-1]
+            st.caption(f"Using: {model_display}")
+        elif st.session_state.needs_reinit:
+            st.warning("⚠️ Needs Reinitialization")
         else:
             st.warning("⚠️ Not Initialized")
 
@@ -256,7 +299,7 @@ def main():
 
         # Model and Retrieval settings (only when initialized)
         if st.session_state.initialized:
-            st.markdown("### 🤖 Model")
+            st.markdown("### 🤖 LLM Model")
             st.session_state.selected_model = st.selectbox(
                 "Select Model",
                 options=[
@@ -294,8 +337,12 @@ def main():
         st.markdown("""
         Powered by:
         - Knowledge Graph (Neo4j)
-        - Semantic Embeddings
-        - LLM Reasoning
+        - Semantic Embeddings (HuggingFace)
+        - LLM Reasoning (Gemini/HF)
+
+        **Embedding Models:**
+        - all-mpnet-base-v2: 384D, accurate
+        - all-MiniLM-L6-v2: 384D, fast
         """)
 
     # Main chat area
@@ -388,6 +435,7 @@ def main():
                 'metadata': {
                     'model': st.session_state.selected_model,
                     'retrieval_method': st.session_state.retrieval_method,
+                    'embedding_model': st.session_state.embedding_model,
                     'response_time': llm_response.response_time,
                     'token_count': llm_response.token_count,
                     'cypher_queries': cypher_queries,
