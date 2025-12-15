@@ -207,11 +207,11 @@ class HuggingFaceProvider(LLMProvider):
     def generate(self, prompt: str, context: str) -> LLMResponse:
         """Generate response using HuggingFace Inference API with chat_completion."""
         # Build chat messages format for instruction-tuned models
-        system_message = "You are an Airline Flight Insights Assistant. Answer questions accurately based on the provided knowledge graph data."
+        # system_message = "You are an Airline Flight Insights Assistant. Answer questions accurately based on the provided knowledge graph data."
         user_content = f"{context}\n\n{prompt}"
         
         messages = [
-            {"role": "system", "content": system_message},
+            # {"role": "system", "content": system_message},
             {"role": "user", "content": user_content}
         ]
         
