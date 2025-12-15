@@ -147,7 +147,7 @@ def generate_llm_description_hf(journey: Dict[str, Any], generator) -> str:
         # Generate response
         result = generator(prompt, max_length=1024, num_return_sequences=1, temperature=0.5)
         response = result[0]['generated_text'].strip()
-
+        print(f"    HF Response: {response}")
         # If response is too short or empty, use fallback
         if len(response) < 50:
             return generate_simple_description(journey)
