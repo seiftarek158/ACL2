@@ -215,15 +215,20 @@ def create_langchain_documents(journeys: List[Dict[str, Any]], descriptions: Lis
 # ============================================================================
 
 def create_vector_store_huggingface(documents: List[Document],
-                                    model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> FAISS:
+                                    model_name: str = "sentence-transformers/all-mpnet-base-v2") -> FAISS:
     """
-    Model 1: Create FAISS vector store using HuggingFace embeddings (free, local).
-    other embedding models that can be used include:
-    - "sentence-transformers/all-mpnet-base-v2" slower but more accurate
-    - "intfloat/e5-base-v2" good balance of speed and accuracy
+    Create FAISS vector store using HuggingFace embeddings (free, local).
+
+    Supported embedding models:
+    - "sentence-transformers/all-mpnet-base-v2" - More accurate, 384 dimensions (DEFAULT)
+    - "sentence-transformers/all-MiniLM-L6-v2" - Faster and lighter, 384 dimensions
+
     Args:
         documents: List of LangChain Document objects
         model_name: HuggingFace embedding model name
+
+    Returns:
+        FAISS vector store with embedded documents
     """
     print(f"Creating embeddings with HuggingFace model: {model_name}...")
 
@@ -231,15 +236,16 @@ def create_vector_store_huggingface(documents: List[Document],
     embedding_model = HuggingFaceEmbeddings(
         model_name=model_name
     )
+
     # Create FAISS vector store
     print(f"Building FAISS vector store with {len(documents)} documents...")
     vector_store = FAISS.from_documents(documents, embedding_model)
 
-    print(f"Vector store created successfully!")
+    print(f"✓ Vector store created successfully with {model_name}!")
     return vector_store
 
 
-def intialize_retriever(vector_store: FAISS, k: int = 5):
+def intialize_retriever(vector_store: FAISS, k: int = 50):
     """
     Initialize a retriever from the FAISS vector store.
 
