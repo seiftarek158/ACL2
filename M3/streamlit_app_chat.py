@@ -202,11 +202,14 @@ def display_chat_message(msg: Dict[str, Any]):
             with col1:
                 st.metric("Retrieval Method", metadata.get('retrieval_method', 'N/A'))
             with col2:
-                embedding_display = metadata.get('embedding_model', 'N/A')
-                if embedding_display != 'N/A' and metadata.get('retrieval_method')!='baseline_only':
-                    embedding_display = embedding_display.split('/')[-1][:15]
-                else:
+                # Hide embedding model when using "Baseline Only (Cypher Queries)"
+                retrieval_method = metadata.get('retrieval_method', 'N/A')
+                if retrieval_method == "Baseline Only (Cypher Queries)":
                     embedding_display = "N/A"
+                else:
+                    embedding_display = metadata.get('embedding_model', 'N/A')
+                    if embedding_display != 'N/A':
+                        embedding_display = embedding_display.split('/')[-1][:15]
                 st.metric("Embedding Model", embedding_display)
             with col3:
                 st.metric("Response Time", f"{metadata.get('response_time', 0):.2f}s")
