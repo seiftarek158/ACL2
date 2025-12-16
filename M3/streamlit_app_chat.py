@@ -216,6 +216,18 @@ def display_chat_message(msg: Dict[str, Any]):
             with col4:
                 st.metric("Tokens Used", metadata.get('token_count', 0))
 
+            # Benchmark Metrics
+            benchmark = metadata.get('benchmark')
+            if benchmark:
+                st.markdown("### 📊 Benchmark Metrics")
+                bcol1, bcol2, bcol3 = st.columns(3)
+                with bcol1:
+                    st.metric("Accuracy Score", f"{benchmark.get('accuracy_score', 0):.2f}")
+                with bcol2:
+                    st.metric("Relevance Score", f"{benchmark.get('relevance_score', 0):.2f}")
+                with bcol3:
+                    st.metric("Est. Cost", f"${benchmark.get('cost_estimate', 0):.6f}")
+
             # Cypher Queries
             if metadata.get('cypher_queries'):
                 st.markdown("### 🔍 Cypher Queries Executed")
@@ -475,6 +487,9 @@ def main():
             if thinking_steps:
                 display_thinking_steps(thinking_steps)
 
+            # Compute benchmark metrics
+            evaluation = st.session_state.assistant.evaluate_response(llm_response, retrieval_result)
+
             # Add assistant message
             st.session_state.chat_history.append({
                 'role': 'assistant',
@@ -489,7 +504,12 @@ def main():
                     'kg_results': retrieval_result,
                     'intent': intent,
                     'entities': entities,
-                    'thinking_steps': thinking_steps
+                    'thinking_steps': thinking_steps,
+                    'benchmark': {
+                        'accuracy_score': evaluation.accuracy_score,
+                        'relevance_score': evaluation.relevance_score,
+                        'cost_estimate': evaluation.cost_estimate
+                    }
                 }
             })
 

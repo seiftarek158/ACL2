@@ -8,7 +8,7 @@ import re
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'M3'))
 from query_templates import QueryTemplateLibrary
 
-HUGGINGFACE_API_TOKEN = "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"
+HUGGINGFACE_API_TOKEN = ""
 
 config_path = os.path.join(os.path.dirname(__file__), "config.txt")
 NEO4J_URI = None
