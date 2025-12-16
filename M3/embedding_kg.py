@@ -245,7 +245,7 @@ def create_vector_store_huggingface(documents: List[Document],
     return vector_store
 
 
-def intialize_retriever(vector_store: FAISS, k: int = 50):
+def intialize_retriever(vector_store: FAISS, k: int = 20):
     """
     Initialize a retriever from the FAISS vector store.
 
