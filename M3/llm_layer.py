@@ -738,8 +738,9 @@ class AirlineInsightsAssistant:
         provider = self.providers[provider_index]
         response = provider.generate(prompt_section, context_section)
         
-        # Add thinking steps to response metadata
+        # Add thinking steps and retrieval result to response metadata
         response.metadata['thinking_steps'] = thinking_steps
+        response.metadata['retrieval_result'] = retrieval_result
         
         return response
     
@@ -881,6 +882,31 @@ class AirlineInsightsAssistant:
                       f"Relevance={evaluation.relevance_score:.2f}, Time={evaluation.response_time:.2f}s")
         
         return results
+    
+    def print_single_benchmark(self, response: LLMResponse):
+        """
+        Print benchmark metrics for a single query response.
+        
+        Args:
+            response: The LLM response with retrieval_result in metadata
+        """
+        retrieval_result = response.metadata.get('retrieval_result')
+        if not retrieval_result:
+            print("\n⚠️  Cannot evaluate: retrieval_result not found in response metadata")
+            return
+        
+        evaluation = self.evaluate_response(response, retrieval_result)
+        
+        print("\n" + "=" * 80)
+        print("📊 QUERY BENCHMARK METRICS")
+        print("=" * 80)
+        print(f"  Model:            {evaluation.model_name}")
+        print(f"  Response Time:    {evaluation.response_time:.3f}s")
+        print(f"  Token Usage:      {evaluation.token_usage}")
+        print(f"  Accuracy Score:   {evaluation.accuracy_score:.2f} (0-1 scale, KG grounding)")
+        print(f"  Relevance Score:  {evaluation.relevance_score:.2f} (0-1 scale, query relevance)")
+        print(f"  Estimated Cost:   ${evaluation.cost_estimate:.6f}")
+        print("=" * 80)
     
     def print_benchmark_summary(self, results: Dict[str, List[EvaluationResult]]):
         """Print a summary of benchmark results."""
@@ -1025,6 +1051,9 @@ def run_chatbot():
             # Get response (intent classification is now automatic)
             response = assistant.answer_question(question)
             format_response(response, show_metadata=True)
+            
+            # Print benchmark metrics for this query
+            assistant.print_single_benchmark(response)
             
         except KeyboardInterrupt:
             print("\n\nChat interrupted by user.")
